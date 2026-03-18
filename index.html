@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Start</title>
+<title>New Tab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1195,8 +1195,9 @@ function buildBookmarkWidget(body, cfg, id) {
   const el = document.getElementById('wp-' + id);
   if (el) { el.style.background = 'var(--surface2)'; el.style.minWidth = '80px'; el.style.minHeight = '80px'; }
 
+  const normalizedUrl = normalizeHttpUrl(cfg.bmUrl);
   const a = document.createElement('a'); a.className = 'bm-widget-inner';
-  a.href = cfg.bmUrl || '#'; a.target = '_blank'; a.rel = 'noopener';
+  a.href = normalizedUrl || '#'; a.target = '_blank'; a.rel = 'noopener noreferrer';
 
   const favWrap = document.createElement('div'); favWrap.className = 'bm-favicon-wrap';
   const fav = document.createElement('img'); fav.className = 'bm-widget-favicon';
@@ -1213,7 +1214,11 @@ function buildBookmarkWidget(body, cfg, id) {
   favWrap.appendChild(fav); favWrap.appendChild(letter);
   a.appendChild(favWrap); a.appendChild(nm); body.appendChild(a);
 
-  a.addEventListener('click', e => { if (!viewMode) e.preventDefault(); });
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    if (!viewMode || !normalizedUrl) return;
+    window.open(normalizedUrl, '_blank', 'noopener,noreferrer');
+  });
 }
 
 // ── TODO ──
