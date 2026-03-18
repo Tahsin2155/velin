@@ -1,6 +1,6 @@
 # velin
 
-A single-file, customizable start page built with plain HTML, CSS, and JavaScript.
+A customizable start page built with plain HTML, CSS, and JavaScript.
 
 The app provides draggable widgets, editable backgrounds, free-form text notes, bookmark management, export/import, and local persistence without any build step.
 
@@ -22,7 +22,7 @@ What is included:
 
 ## Quick start
 
-1. Open startpage.html in any modern browser.
+1. Open index.html in any modern browser.
 2. Use the top toolbar to add widgets and open panels.
 3. Customize layout and background.
 4. Your setup is saved automatically.
@@ -31,7 +31,9 @@ No npm, no bundler, no install required.
 
 ## File structure
 
-- startpage.html: Entire application (HTML, styles, logic)
+- index.html: Main document shell and UI markup
+- styles.css: Application styles
+- script.js: Application logic
 - README.md: Project documentation
 
 ## Core features
@@ -113,13 +115,12 @@ If notifications are blocked, pomodoro still works without system alerts.
 
 - Imported JSON is merged with prototype-pollution key guards.
 - Markdown links are sanitized to allow only http/https targets.
-- External links use noopener/noreferrer.
 
 ## Known limitations
 
 - App state is browser-local. Data does not sync between devices.
 - Large uploaded images may exceed localStorage limits.
-- Because this is a single-file app, code splitting and lazy loading are not used.
+- Data is persisted in localStorage and can grow if image backgrounds are used.
 
 ## Maintenance checklist
 
