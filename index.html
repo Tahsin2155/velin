@@ -1201,7 +1201,7 @@ function buildBookmarkWidget(body, cfg, id) {
 
   const normalizedUrl = normalizeHttpUrl(cfg.bmUrl);
   const a = document.createElement('a'); a.className = 'bm-widget-inner';
-  a.href = normalizedUrl || '#'; a.target = '_blank'; a.rel = 'noopener noreferrer';
+  a.href = normalizedUrl || '#';
 
   const favWrap = document.createElement('div'); favWrap.className = 'bm-favicon-wrap';
   const fav = document.createElement('img'); fav.className = 'bm-widget-favicon';
@@ -1221,7 +1221,7 @@ function buildBookmarkWidget(body, cfg, id) {
   a.addEventListener('click', e => {
     e.preventDefault();
     if (!viewMode || !normalizedUrl) return;
-    window.open(normalizedUrl, '_blank', 'noopener,noreferrer');
+    window.location.assign(normalizedUrl);
   });
 }
 
