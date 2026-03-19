@@ -15,7 +15,7 @@ const DEF = {
 function dMerge(t, s) {
   for (const k in s) {
     // Guard against prototype pollution keys from imported JSON.
-  
+
     if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
     if (s[k] && typeof s[k] === 'object' && !Array.isArray(s[k])) {
       t[k] = t[k] || {};
@@ -64,7 +64,7 @@ try {
     if (!Array.isArray(S.ftNotes)) S.ftNotes = [];
     if (!Array.isArray(S.bookmarks)) S.bookmarks = [];
   }
-} catch(e) {
+} catch (e) {
   console.warn('Corrupt localStorage, resetting:', e);
   S = JSON.parse(JSON.stringify(DEF));
   localStorage.removeItem(STORAGE_KEY);
@@ -74,14 +74,14 @@ try {
 function persistNow() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(S));
-  } catch(e) {
+  } catch (e) {
     // Likely QuotaExceededError — drop the stored image and try again
     if (S.bg && S.bg.type === 'image' && S.bg.imgData) {
       const withoutImg = JSON.parse(JSON.stringify(S));
       withoutImg.bg = { type: 'solid', value: '#0d0d0f' };
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutImg));
-      } catch(e2) {}
+      } catch (e2) { }
       showImgWarn();
     }
   }
@@ -122,8 +122,8 @@ function showImgWarn() {
 function snap(v) { return Math.round(v / 20) * 20; }
 function pad(n) { return String(n).padStart(2, '0'); }
 
-const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function normalizeHttpUrl(url) {
   const trimmed = (url || '').trim();
@@ -134,7 +134,7 @@ function normalizeHttpUrl(url) {
 function getHostname(url) {
   try {
     return new URL(normalizeHttpUrl(url)).hostname;
-  } catch(e) {
+  } catch (e) {
     return (url || '').trim();
   }
 }
@@ -145,26 +145,26 @@ function renderMD(md) {
     try {
       const url = new URL(href, location.href);
       if (url.protocol === 'http:' || url.protocol === 'https:') return href;
-    } catch(e) {}
+    } catch (e) { }
     return '#';
   }
   // Escape HTML first
   let out = md
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   // Block-level: headings and hr (operate on lines)
   out = out
-    .replace(/^### (.+)$/gm,'<h3>$1</h3>')
-    .replace(/^## (.+)$/gm,'<h2>$1</h2>')
-    .replace(/^# (.+)$/gm,'<h1>$1</h1>')
-    .replace(/^---$/gm,'<hr>');
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^---$/gm, '<hr>');
 
   // Inline: bold, italic, code, links
   out = out
-    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g,'<em>$1</em>')
-    .replace(/`(.+?)`/g,'<code>$1</code>')
-    .replace(/\[(.+?)\]\((.+?)\)/g,(_,text,href)=>`<a href="${sanitizeHref(href)}">${text}</a>`);
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/\[(.+?)\]\((.+?)\)/g, (_, text, href) => `<a href="${sanitizeHref(href)}">${text}</a>`);
 
   // FIX 3: Build output line by line, grouping consecutive list items into one <ul>
   const lines = out.split('\n');
@@ -231,8 +231,8 @@ function applyMode() {
 document.getElementById('mode-toggle').addEventListener('click', () => { viewMode = !viewMode; applyMode(); });
 document.addEventListener('keydown', e => {
   if (e.key === 'e' && !e.ctrlKey && !e.metaKey &&
-      document.activeElement.tagName !== 'INPUT' &&
-      document.activeElement.tagName !== 'TEXTAREA') {
+    document.activeElement.tagName !== 'INPUT' &&
+    document.activeElement.tagName !== 'TEXTAREA') {
     viewMode = !viewMode; applyMode();
   }
 });
@@ -273,7 +273,7 @@ document.getElementById('bg-close-btn').addEventListener('click', () => bgPanel.
 document.querySelectorAll('.bg-tab').forEach(t => t.addEventListener('click', () => {
   document.querySelectorAll('.bg-tab').forEach(x => x.classList.remove('active'));
   t.classList.add('active');
-  ['solid','gradient','image'].forEach(n => document.getElementById('bg-' + n + '-panel').classList.toggle('show', n === t.dataset.bgtab));
+  ['solid', 'gradient', 'image'].forEach(n => document.getElementById('bg-' + n + '-panel').classList.toggle('show', n === t.dataset.bgtab));
 }));
 
 document.querySelectorAll('.color-swatch').forEach(sw => sw.addEventListener('click', () => {
@@ -300,7 +300,7 @@ function buildCustomGrad() {
   S.bg = { type: 'gradient', value: `linear-gradient(${dir},${c1},${c2})` };
   save(); applyBg();
 }
-['grad-c1','grad-c2','grad-dir'].forEach(id => document.getElementById(id).addEventListener('input', buildCustomGrad));
+['grad-c1', 'grad-c2', 'grad-dir'].forEach(id => document.getElementById(id).addEventListener('input', buildCustomGrad));
 
 // FIX 7: Image stored in S.bg but save() will handle quota gracefully
 document.getElementById('img-upload').addEventListener('change', e => {
@@ -353,7 +353,7 @@ function persistFaviconCacheNow() {
       out[hostname] = { u: entry.url, t: entry.ts };
     }
     localStorage.setItem(FAV_CACHE_STORAGE_KEY, JSON.stringify(out));
-  } catch(e) {}
+  } catch (e) { }
 }
 
 function schedulePersistFaviconCache() {
@@ -382,7 +382,7 @@ function loadPersistedFaviconCache() {
       const oldestKey = _favCache.keys().next().value;
       _favCache.delete(oldestKey);
     }
-  } catch(e) {}
+  } catch (e) { }
 }
 
 function getCachedFavicon(hostname) {
@@ -423,7 +423,7 @@ function _testImg(url) {
     const img = new Image();
     // FIX 10: Reduced favicon timeout from 5s to 2s to avoid page sluggishness
     const t = setTimeout(rej, 2000);
-    img.onload = function() { clearTimeout(t); (this.naturalWidth > 1 && this.naturalHeight > 1) ? res(url) : rej(); };
+    img.onload = function () { clearTimeout(t); (this.naturalWidth > 1 && this.naturalHeight > 1) ? res(url) : rej(); };
     img.onerror = () => { clearTimeout(t); rej(); };
     img.src = url;
   });
@@ -452,7 +452,7 @@ async function resolveFaviconUrl(hostname) {
         if (!url) continue;
         setCachedFavicon(hostname, url);
         return url;
-      } catch(e) {}
+      } catch (e) { }
     }
 
     // Cache misses too, to avoid repeated expensive retries.
@@ -515,7 +515,7 @@ function makeWidget(cfg) {
   const el = document.createElement('div');
   el.className = 'wp'; el.id = 'wp-' + id;
   el.dataset.type = cfg.type;
-  el.style.cssText = `left:${cfg.x||80}px;top:${cfg.y||80}px;width:${cfg.w||280}px;${cfg.h ? 'height:' + cfg.h + 'px;' : ''}z-index:${++zTop};`;
+  el.style.cssText = `left:${cfg.x || 80}px;top:${cfg.y || 80}px;width:${cfg.w || 280}px;${cfg.h ? 'height:' + cfg.h + 'px;' : ''}z-index:${++zTop};`;
   if (cfg.rot) el.style.transform = `rotate(${cfg.rot}deg)`;
 
   const hdr = document.createElement('div'); hdr.className = 'wp-header';
@@ -710,8 +710,8 @@ function buildClock(body, cfg, id) {
         ctx.beginPath();
         ctx.moveTo(cx + Math.cos(a) * (R - (isM ? R * .17 : R * .1)), cy + Math.sin(a) * (R - (isM ? R * .17 : R * .1)));
         ctx.lineTo(cx + Math.cos(a) * (R - R * .05), cy + Math.sin(a) * (R - R * .05));
-        ctx.strokeStyle = isM ? 'rgba(180,175,165,0.7)' : 'rgba(128,128,128,0.25)';
-        ctx.lineWidth = isM ? 2 : 1; ctx.stroke();
+        ctx.strokeStyle = isM ? 'rgba(180,175,165,1)' : 'rgba(128,128,128,1)';
+        ctx.lineWidth = isM ? 2 : 3; ctx.stroke();
       }
       const hr = h % 12 + m / 60, mn = m + s / 60;
       function dh(ang, len, w, col) {
@@ -1008,7 +1008,7 @@ function buildPomodoro(body, cfg, id) {
     try {
       const lock = readLock();
       if (lock && lock.ownerId === TAB_ID) localStorage.removeItem(LOCK_KEY);
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function isRemoteFresher(remote, local) {
@@ -1046,7 +1046,7 @@ function buildPomodoro(body, cfg, id) {
       } else if (isRemoteFresher(remoteState, state)) {
         state = remoteState;
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function persistState() {
@@ -1259,7 +1259,7 @@ function closeWidget(id) {
   const ref = wRefs[id];
   if (!ref) return;
   // FIX 4: Run all cleanups, not just one
-  if (Array.isArray(ref._cleanups)) ref._cleanups.forEach(fn => { try { fn(); } catch(e) {} });
+  if (Array.isArray(ref._cleanups)) ref._cleanups.forEach(fn => { try { fn(); } catch (e) { } });
   ref.el.remove();
   delete wRefs[id];
   S.widgets = S.widgets.filter(w => w.id !== id);
@@ -1696,11 +1696,11 @@ function importSettings(file) {
       if (!Array.isArray(S.ftNotes)) S.ftNotes = [];
       if (!Array.isArray(S.bookmarks)) S.bookmarks = [];
       save();
-      
+
       // Reload page to apply all settings
       showNotification('Settings imported', { body: 'Reloading with new settings...' });
       setTimeout(() => location.reload(), 500);
-    } catch(e) {
+    } catch (e) {
       showNotification('Import failed', { body: 'Invalid file or corrupted data.' });
       console.error('Import error:', e);
     }

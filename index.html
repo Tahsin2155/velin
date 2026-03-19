@@ -1,141 +1,150 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>New Tab</title>
-<link rel="icon" href="./favicon-dark.svg" media="(prefers-color-scheme: dark)" type="image/svg+xml">
-<link rel="icon" href="./favicon-light.svg" media="(prefers-color-scheme: light)" type="image/svg+xml">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./styles.css">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Tab</title>
+  <link rel="icon" href="./favicon-dark.svg" media="(prefers-color-scheme: dark)" type="image/svg+xml">
+  <link rel="icon" href="./favicon-light.svg" media="(prefers-color-scheme: light)" type="image/svg+xml">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
 </head>
+
 <body>
 
-<div id="brand-mark" aria-label="Velin brand">Velin</div>
+  <div id="brand-mark" aria-label="Velin brand">Velin</div>
 
-<div id="bg-img-layer"></div>
-<div id="bg-layer"></div>
-<div id="canvas"></div>
+  <div id="bg-img-layer"></div>
+  <div id="bg-layer"></div>
+  <div id="canvas"></div>
 
-<!-- MODE TOGGLE -->
-<button id="mode-toggle" title="Toggle view/edit mode (E)">
-  <span id="mode-icon">✦</span>
-  <span id="mode-label">view</span>
-</button>
+  <!-- MODE TOGGLE -->
+  <button id="mode-toggle" title="Toggle view/edit mode (E)">
+    <span id="mode-icon">✦</span>
+    <span id="mode-label">view</span>
+  </button>
 
-<!-- TOOLBAR -->
-<div id="toolbar">
-  <div class="theme-dot td-dark" data-theme="dark"></div>
-  <div class="theme-dot td-light" data-theme="light"></div>
-  <div class="theme-dot td-glass" data-theme="glass"></div>
-  <div class="theme-dot td-bw" data-theme="bw"></div>
-  <div class="tb-sep"></div>
-  <button class="tb-btn" data-add="clock">⊕ clock</button>
-  <button class="tb-btn" id="bm-launcher-btn">⊕ bookmarks</button>
-  <button class="tb-btn" data-add="todo">⊕ todo</button>
-  <button class="tb-btn" data-add="note">⊕ note</button>
-  <button class="tb-btn" data-add="pomodoro">⊕ pomodoro</button>
-  <div class="tb-sep"></div>
-  <button class="tb-btn" id="ft-toggle-btn">✏ text</button>
-  <button class="tb-btn" id="bg-toggle-btn">◑ bg</button>
-  <button class="tb-btn" id="export-btn" title="Export settings">⬇ export</button>
-  <button class="tb-btn" id="import-btn" title="Import settings">⬆ import</button>
-  <input type="file" id="import-file" accept=".json" style="display:none;">
-</div>
-
-<!-- BOOKMARK PANEL -->
-<div id="bm-panel">
-  <div id="bm-panel-title">bookmarks</div>
-  <div id="bm-saved-list"></div>
-  <div id="bm-add-row">
-    <input class="mini-input" id="bm-name-inp" placeholder="Name" style="max-width:90px;">
-    <input class="mini-input" id="bm-url-inp" placeholder="https://...">
-    <button class="add-btn" id="bm-add-btn">add</button>
+  <!-- TOOLBAR -->
+  <div id="toolbar">
+    <div class="theme-dot td-dark" data-theme="dark"></div>
+    <div class="theme-dot td-light" data-theme="light"></div>
+    <div class="theme-dot td-glass" data-theme="glass"></div>
+    <div class="theme-dot td-bw" data-theme="bw"></div>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" data-add="clock">⊕ clock</button>
+    <button class="tb-btn" id="bm-launcher-btn">⊕ bookmarks</button>
+    <button class="tb-btn" data-add="todo">⊕ todo</button>
+    <button class="tb-btn" data-add="note">⊕ note</button>
+    <button class="tb-btn" data-add="pomodoro">⊕ pomodoro</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="ft-toggle-btn">✏ text</button>
+    <button class="tb-btn" id="bg-toggle-btn">◑ bg</button>
+    <button class="tb-btn" id="export-btn" title="Export settings">⬇ export</button>
+    <button class="tb-btn" id="import-btn" title="Import settings">⬆ import</button>
+    <input type="file" id="import-file" accept=".json" style="display:none;">
   </div>
-  <button class="tb-btn" id="bm-panel-close" style="align-self:flex-end;font-size:11px;">close ✕</button>
-</div>
 
-<!-- BG PANEL -->
-<div id="bg-panel">
-  <div>
-    <div class="bg-section-title">background</div>
-    <div class="bg-tabs">
-      <button class="bg-tab active" data-bgtab="solid">solid</button>
-      <button class="bg-tab" data-bgtab="gradient">gradient</button>
-      <button class="bg-tab" data-bgtab="image">image</button>
+  <!-- BOOKMARK PANEL -->
+  <div id="bm-panel">
+    <div id="bm-panel-title">bookmarks</div>
+    <div id="bm-saved-list"></div>
+    <div id="bm-add-row">
+      <input class="mini-input" id="bm-name-inp" placeholder="Name" style="max-width:90px;">
+      <input class="mini-input" id="bm-url-inp" placeholder="https://...">
+      <button class="add-btn" id="bm-add-btn">add</button>
     </div>
+    <button class="tb-btn" id="bm-panel-close" style="align-self:flex-end;font-size:11px;">close ✕</button>
   </div>
-  <div id="bg-solid-panel" class="show">
-    <div class="bg-section-title">color</div>
-    <div class="color-row">
-      <div class="color-swatch active" style="background:#0d0d0f" data-color="#0d0d0f"></div>
-      <div class="color-swatch" style="background:#0f1117" data-color="#0f1117"></div>
-      <div class="color-swatch" style="background:#1a1a2e" data-color="#1a1a2e"></div>
-      <div class="color-swatch" style="background:#f0ece5" data-color="#f0ece5"></div>
-      <div class="color-swatch" style="background:#1a2433" data-color="#1a2433"></div>
-      <div class="color-swatch" style="background:#181818" data-color="#181818"></div>
-      <input type="color" id="solid-color-picker" value="#0d0d0f" title="Custom color">
-    </div>
-  </div>
-  <div id="bg-gradient-panel">
-    <div class="bg-section-title">presets</div>
-    <div class="grad-row">
-      <div class="grad-preset" style="background:linear-gradient(135deg,#0d0d0f,#1a1a2e)" data-grad="linear-gradient(135deg,#0d0d0f,#1a1a2e)"></div>
-      <div class="grad-preset" style="background:linear-gradient(135deg,#16213e,#0f3460)" data-grad="linear-gradient(135deg,#16213e,#0f3460)"></div>
-      <div class="grad-preset" style="background:linear-gradient(135deg,#1a0a2e,#2d1b69)" data-grad="linear-gradient(135deg,#1a0a2e,#2d1b69)"></div>
-      <div class="grad-preset" style="background:linear-gradient(135deg,#0a1628,#1e3a5f)" data-grad="linear-gradient(135deg,#0a1628,#1e3a5f)"></div>
-      <div class="grad-preset" style="background:linear-gradient(135deg,#1a2520,#0d3b2e)" data-grad="linear-gradient(135deg,#1a2520,#0d3b2e)"></div>
-      <div class="grad-preset" style="background:linear-gradient(160deg,#f0ece5,#d4c8b8)" data-grad="linear-gradient(160deg,#f0ece5,#d4c8b8)"></div>
-    </div>
-    <div class="color-row" style="margin-top:10px;">
-      <span style="font-size:11px;color:var(--text2);">from</span>
-      <input type="color" id="grad-c1" value="#0d0d0f">
-      <span style="font-size:11px;color:var(--text2);">to</span>
-      <input type="color" id="grad-c2" value="#1a1a2e">
-      <select id="grad-dir" style="background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:3px 6px;font-size:11px;font-family:var(--font-sans);outline:none;">
-        <option value="135deg">↘</option>
-        <option value="to bottom">↓</option>
-        <option value="to right">→</option>
-        <option value="45deg">↗</option>
-      </select>
-    </div>
-  </div>
-  <div id="bg-image-panel">
-    <label class="img-upload-btn" for="img-upload">↑ upload image</label>
-    <input type="file" id="img-upload" accept="image/*" style="display:none">
-    <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
-      <label style="font-size:11px;color:var(--text2);min-width:50px;">brightness</label>
-      <input type="range" id="img-brightness" min="0" max="200" value="100">
-      <span id="brightness-val" style="font-size:11px;color:var(--text2);min-width:28px;">100%</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
-      <label style="font-size:11px;color:var(--text2);min-width:50px;">blur</label>
-      <input type="range" id="img-blur" min="0" max="20" value="0">
-      <span id="blur-val" style="font-size:11px;color:var(--text2);min-width:28px;">0px</span>
-    </div>
-  </div>
-  <button class="tb-btn" id="bg-close-btn" style="align-self:flex-end;">close ✕</button>
-</div>
 
-<div id="ft-hint">click to place text — focus note to style — hover to delete — Esc exits</div>
-<div id="ft-stylebar">
-  <button class="fts-btn" id="ft-size-dec" title="Smaller text">A-</button>
-  <button class="fts-btn" id="ft-size-inc" title="Larger text">A+</button>
-  <button class="fts-btn" id="ft-rot-dec" title="Rotate left">↺</button>
-  <button class="fts-btn" id="ft-rot-inc" title="Rotate right">↻</button>
-  <button class="fts-btn" id="ft-bold" title="Toggle bold">B</button>
-  <input type="color" id="ft-color" title="Text color" value="#f0ede8">
-  <span id="ft-size-read">14px</span>
-  <span id="ft-rot-read">0°</span>
-  <button class="fts-btn" id="ft-del" title="Delete text">✕</button>
-</div>
-<div id="img-warn">image too large to save — use a smaller file</div>
+  <!-- BG PANEL -->
+  <div id="bg-panel">
+    <div>
+      <div class="bg-section-title">background</div>
+      <div class="bg-tabs">
+        <button class="bg-tab active" data-bgtab="solid">solid</button>
+        <button class="bg-tab" data-bgtab="gradient">gradient</button>
+        <button class="bg-tab" data-bgtab="image">image</button>
+      </div>
+    </div>
+    <div id="bg-solid-panel" class="show">
+      <div class="bg-section-title">color</div>
+      <div class="color-row">
+        <div class="color-swatch active" style="background:#0d0d0f" data-color="#0d0d0f"></div>
+        <div class="color-swatch" style="background:#0f1117" data-color="#0f1117"></div>
+        <div class="color-swatch" style="background:#1a1a2e" data-color="#1a1a2e"></div>
+        <div class="color-swatch" style="background:#f0ece5" data-color="#f0ece5"></div>
+        <div class="color-swatch" style="background:#1a2433" data-color="#1a2433"></div>
+        <div class="color-swatch" style="background:#181818" data-color="#181818"></div>
+        <input type="color" id="solid-color-picker" value="#0d0d0f" title="Custom color">
+      </div>
+    </div>
+    <div id="bg-gradient-panel">
+      <div class="bg-section-title">presets</div>
+      <div class="grad-row">
+        <div class="grad-preset" style="background:linear-gradient(135deg,#0d0d0f,#1a1a2e)"
+          data-grad="linear-gradient(135deg,#0d0d0f,#1a1a2e)"></div>
+        <div class="grad-preset" style="background:linear-gradient(135deg,#16213e,#0f3460)"
+          data-grad="linear-gradient(135deg,#16213e,#0f3460)"></div>
+        <div class="grad-preset" style="background:linear-gradient(135deg,#1a0a2e,#2d1b69)"
+          data-grad="linear-gradient(135deg,#1a0a2e,#2d1b69)"></div>
+        <div class="grad-preset" style="background:linear-gradient(135deg,#0a1628,#1e3a5f)"
+          data-grad="linear-gradient(135deg,#0a1628,#1e3a5f)"></div>
+        <div class="grad-preset" style="background:linear-gradient(135deg,#1a2520,#0d3b2e)"
+          data-grad="linear-gradient(135deg,#1a2520,#0d3b2e)"></div>
+        <div class="grad-preset" style="background:linear-gradient(160deg,#f0ece5,#d4c8b8)"
+          data-grad="linear-gradient(160deg,#f0ece5,#d4c8b8)"></div>
+      </div>
+      <div class="color-row" style="margin-top:10px;">
+        <span style="font-size:11px;color:var(--text2);">from</span>
+        <input type="color" id="grad-c1" value="#0d0d0f">
+        <span style="font-size:11px;color:var(--text2);">to</span>
+        <input type="color" id="grad-c2" value="#1a1a2e">
+        <select id="grad-dir"
+          style="background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:3px 6px;font-size:11px;font-family:var(--font-sans);outline:none;">
+          <option value="135deg">↘</option>
+          <option value="to bottom">↓</option>
+          <option value="to right">→</option>
+          <option value="45deg">↗</option>
+        </select>
+      </div>
+    </div>
+    <div id="bg-image-panel">
+      <label class="img-upload-btn" for="img-upload">↑ upload image</label>
+      <input type="file" id="img-upload" accept="image/*" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+        <label style="font-size:11px;color:var(--text2);min-width:50px;">brightness</label>
+        <input type="range" id="img-brightness" min="0" max="200" value="100">
+        <span id="brightness-val" style="font-size:11px;color:var(--text2);min-width:28px;">100%</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+        <label style="font-size:11px;color:var(--text2);min-width:50px;">blur</label>
+        <input type="range" id="img-blur" min="0" max="20" value="0">
+        <span id="blur-val" style="font-size:11px;color:var(--text2);min-width:28px;">0px</span>
+      </div>
+    </div>
+    <button class="tb-btn" id="bg-close-btn" style="align-self:flex-end;">close ✕</button>
+  </div>
 
-<script src="./script.js"></script>
+  <div id="ft-hint">click to place text — focus note to style — hover to delete — Esc exits</div>
+  <div id="ft-stylebar">
+    <button class="fts-btn" id="ft-size-dec" title="Smaller text">A-</button>
+    <button class="fts-btn" id="ft-size-inc" title="Larger text">A+</button>
+    <button class="fts-btn" id="ft-rot-dec" title="Rotate left">↺</button>
+    <button class="fts-btn" id="ft-rot-inc" title="Rotate right">↻</button>
+    <button class="fts-btn" id="ft-bold" title="Toggle bold">B</button>
+    <input type="color" id="ft-color" title="Text color" value="#f0ede8">
+    <span id="ft-size-read">14px</span>
+    <span id="ft-rot-read">0°</span>
+    <button class="fts-btn" id="ft-del" title="Delete text">✕</button>
+  </div>
+  <div id="img-warn">image too large to save — use a smaller file</div>
+
+  <script src="./script.js"></script>
 </body>
+
 </html>
-
-
-
