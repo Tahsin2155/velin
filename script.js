@@ -1,25 +1,24 @@
-
 // ══════════════════════════════
 //  STATE
 // ══════════════════════════════
 const DEF = {
   theme: 'dark',
   viewMode: false,
+  blurMode: 'auto',   // 'auto' | 'on' | 'off'
   bg: { type: 'solid', value: '#0d0d0f' },
   widgets: [],
   ftNotes: [],
   bookmarks: []
 };
 
-// FIX 6: dMerge defined BEFORE it is called below
-function dMerge(t, s) {
+// FIX: dMerge with recursion depth cap to prevent stack overflow on deep nested imports
+function dMerge(t, s, _depth = 0) {
+  if (_depth > 20) return; // cap recursion depth
   for (const k in s) {
-    // Guard against prototype pollution keys from imported JSON.
-
     if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
     if (s[k] && typeof s[k] === 'object' && !Array.isArray(s[k])) {
       t[k] = t[k] || {};
-      dMerge(t[k], s[k]);
+      dMerge(t[k], s[k], _depth + 1);
     } else {
       t[k] = s[k];
     }
@@ -52,66 +51,235 @@ requestNotificationPermission();
 
 let S = JSON.parse(JSON.stringify(DEF));
 const STORAGE_KEY = 'sp3';
+const LS_FALLBACK_KEY = 'sp3_ls_fallback'; // localStorage fallback key
 const SAVE_DEBOUNCE_MS = 120;
 let _saveTimer = null;
 
-try {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw) {
-    const parsed = JSON.parse(raw);
-    dMerge(S, parsed);
-    if (!Array.isArray(S.widgets)) S.widgets = [];
-    if (!Array.isArray(S.ftNotes)) S.ftNotes = [];
-    if (!Array.isArray(S.bookmarks)) S.bookmarks = [];
-  }
-} catch (e) {
-  console.warn('Corrupt localStorage, resetting:', e);
-  S = JSON.parse(JSON.stringify(DEF));
-  localStorage.removeItem(STORAGE_KEY);
+// ══════════════════════════════
+//  INDEXEDDB  (primary storage)
+//  Falls back to localStorage on any IDB failure
+// ══════════════════════════════
+const DB_NAME    = 'velin_db';
+const DB_VERSION = 1;
+const DB_STORE   = 'state';
+let _db = null;
+let _dbReady = false;
+let _dbFailed = false;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    if (_db) { resolve(_db); return; }
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onerror = () => { _dbFailed = true; reject(req.error); };
+    req.onsuccess = () => { _db = req.result; _dbReady = true; resolve(_db); };
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(DB_STORE)) {
+        db.createObjectStore(DB_STORE, { keyPath: 'id' });
+      }
+    };
+  });
 }
 
-// Persist immediately with quota guard; if image payload is too large, fall back safely.
-function persistNow() {
+function idbPut(data) {
+  return new Promise((resolve, reject) => {
+    if (!_db) { reject('no db'); return; }
+    const tx = _db.transaction([DB_STORE], 'readwrite');
+    const req = tx.objectStore(DB_STORE).put({ id: 'main', data, savedAt: Date.now() });
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbGet() {
+  return new Promise((resolve, reject) => {
+    if (!_db) { reject('no db'); return; }
+    const tx = _db.transaction([DB_STORE], 'readonly');
+    const req = tx.objectStore(DB_STORE).get('main');
+    req.onsuccess = () => resolve(req.result ? req.result.data : null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ══════════════════════════════
+//  COMPRESS STATE BEFORE SAVE
+//  Strips oversized image data to prevent quota kills
+// ══════════════════════════════
+const IMG_SIZE_WARN_BYTES = 500 * 1024; // 500 KB
+
+function compressStateForStorage(state) {
+  const copy = JSON.parse(JSON.stringify(state));
+  if (copy.bg && copy.bg.type === 'image' && copy.bg.imgData) {
+    if (copy.bg.imgData.length > IMG_SIZE_WARN_BYTES) {
+      console.warn('Background image too large for storage, stripping');
+      copy.bg = { type: 'solid', value: '#0d0d0f' };
+    }
+  }
+  return copy;
+}
+
+// ══════════════════════════════
+//  QUOTA MONITOR  (localStorage fallback only)
+// ══════════════════════════════
+function estimateLsUsagePercent() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(S));
+    let used = 0;
+    for (const k in localStorage) {
+      if (Object.prototype.hasOwnProperty.call(localStorage, k)) {
+        try { used += (localStorage.getItem(k) || '').length * 2; } catch (e) {} // UTF-16 ~2 bytes/char
+      }
+    }
+    return Math.min(100, Math.round((used / (5 * 1024 * 1024)) * 100));
+  } catch (e) { return 0; }
+}
+
+function warnIfLsNearFull() {
+  const pct = estimateLsUsagePercent();
+  if (pct >= 90) {
+    console.warn(`localStorage ~${pct}% full — export your settings!`);
+    showNotification('Storage almost full', { body: `~${pct}% used. Export settings to avoid data loss.` });
+  }
+}
+
+// ══════════════════════════════
+//  PERSIST  (IDB primary, LS fallback)
+// ══════════════════════════════
+function persistNow() {
+  const compressed = compressStateForStorage(S);
+
+  if (_dbReady && !_dbFailed) {
+    idbPut(compressed).catch(e => {
+      console.error('IDB save failed, falling back to localStorage:', e);
+      _dbFailed = true;
+      lsFallbackSave(compressed);
+    });
+  } else {
+    lsFallbackSave(compressed);
+  }
+}
+
+function lsFallbackSave(compressed) {
+  try {
+    localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(compressed));
+    warnIfLsNearFull();
   } catch (e) {
-    // Likely QuotaExceededError — drop the stored image and try again
-    if (S.bg && S.bg.type === 'image' && S.bg.imgData) {
-      const withoutImg = JSON.parse(JSON.stringify(S));
-      withoutImg.bg = { type: 'solid', value: '#0d0d0f' };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutImg));
-      } catch (e2) { }
-      showImgWarn();
+    // Last resort: strip image and retry
+    if (compressed.bg && compressed.bg.type === 'image') {
+      compressed.bg = { type: 'solid', value: '#0d0d0f' };
+      try { localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(compressed)); showImgWarn(); }
+      catch (e2) { showNotification('Storage full', { body: 'Delete some widgets to free space.' }); }
+    } else {
+      showNotification('Storage full', { body: 'Delete some widgets to free space.' });
     }
   }
 }
 
-// Debounced saves reduce localStorage churn during typing and drag interactions.
-function save(immediate = false) {
-  if (immediate) {
-    if (_saveTimer) {
-      clearTimeout(_saveTimer);
-      _saveTimer = null;
-    }
+// ══════════════════════════════
+//  SAVE  (debounced public API)
+// ══════════════════════════════
+function save(flush = false) {
+  if (flush) {
+    if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
     persistNow();
     return;
   }
   if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
-    _saveTimer = null;
-    persistNow();
-  }, SAVE_DEBOUNCE_MS);
+  _saveTimer = setTimeout(() => { _saveTimer = null; persistNow(); }, SAVE_DEBOUNCE_MS);
 }
 
-// Flush pending writes when leaving the page to minimize in-flight data loss.
+function saveNow() { save(true); }
+
 window.addEventListener('beforeunload', () => {
-  if (_saveTimer) {
-    clearTimeout(_saveTimer);
-    _saveTimer = null;
-    persistNow();
-  }
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+  // Sync flush on unload — IDB async won't complete in time so always LS too
+  try {
+    const compressed = compressStateForStorage(S);
+    localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(compressed));
+  } catch (e) {}
 });
+
+// ══════════════════════════════
+//  SAFE LOAD FROM STORAGE
+// ══════════════════════════════
+function sanitizeLoadedState(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  if (!Array.isArray(parsed.widgets))   parsed.widgets = [];
+  if (!Array.isArray(parsed.ftNotes))   parsed.ftNotes = [];
+  if (!Array.isArray(parsed.bookmarks)) parsed.bookmarks = [];
+  // Sanitize widget count — if >50 keep newest 50 (they're ordered oldest-first)
+  if (parsed.widgets.length > 50) {
+    console.warn(`Clamping widget count from ${parsed.widgets.length} to 50`);
+    parsed.widgets = parsed.widgets.slice(-50);
+  }
+  return parsed;
+}
+
+function loadFromLsFallback() {
+  try {
+    // Try new key first, then legacy key for migration
+    const raw = localStorage.getItem(LS_FALLBACK_KEY) || localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return sanitizeLoadedState(parsed);
+  } catch (e) {
+    console.warn('LS load failed, clearing corrupt data:', e);
+    localStorage.removeItem(LS_FALLBACK_KEY);
+    localStorage.removeItem(STORAGE_KEY);
+    return null;
+  }
+}
+
+// ══════════════════════════════
+//  BOOTSTRAP  (async IDB load → then render)
+// ══════════════════════════════
+let _appBooted = false;
+
+async function bootApp() {
+  if (_appBooted) return;
+  _appBooted = true;
+
+  let loaded = null;
+
+  try {
+    await openDB();
+    loaded = await idbGet();
+    if (loaded) {
+      loaded = sanitizeLoadedState(loaded);
+      // Migrate old localStorage data into IDB on first run
+      const lsData = loadFromLsFallback();
+      if (lsData && (!loaded || (lsData.widgets || []).length > (loaded.widgets || []).length)) {
+        console.log('Migrating localStorage → IndexedDB');
+        loaded = lsData;
+        await idbPut(compressStateForStorage(lsData)).catch(() => {});
+      }
+    } else {
+      // IDB empty — load from localStorage (first visit or migration)
+      loaded = loadFromLsFallback();
+      if (loaded) {
+        console.log('First IDB boot: migrating from localStorage');
+        await idbPut(compressStateForStorage(loaded)).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.warn('IDB unavailable, using localStorage:', e);
+    _dbFailed = true;
+    loaded = loadFromLsFallback();
+  }
+
+  if (loaded) dMerge(S, loaded);
+  if (!Array.isArray(S.widgets))   S.widgets = [];
+  if (!Array.isArray(S.ftNotes))   S.ftNotes = [];
+  if (!Array.isArray(S.bookmarks)) S.bookmarks = [];
+  viewMode = S.viewMode || false;
+  // Now render everything that depends on loaded state
+  applyTheme(S.theme);
+  applyBlurMode(S.blurMode || 'auto');
+  applyMode();
+  applyBg();
+  renderBmSaved();
+  renderFT();
+  S.widgets.forEach(cfg => makeWidget(cfg));
+}
 
 function showImgWarn() {
   const w = document.getElementById('img-warn');
@@ -132,14 +300,11 @@ function normalizeHttpUrl(url) {
 }
 
 function getHostname(url) {
-  try {
-    return new URL(normalizeHttpUrl(url)).hostname;
-  } catch (e) {
-    return (url || '').trim();
-  }
+  try { return new URL(normalizeHttpUrl(url)).hostname; }
+  catch (e) { return (url || '').trim(); }
 }
 
-// FIX 3 (markdown): Proper multi-line <ul> grouping using a line-by-line pass
+// Markdown renderer
 function renderMD(md) {
   function sanitizeHref(href) {
     try {
@@ -148,25 +313,17 @@ function renderMD(md) {
     } catch (e) { }
     return '#';
   }
-  // Escape HTML first
-  let out = md
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-  // Block-level: headings and hr (operate on lines)
+  let out = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   out = out
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
     .replace(/^---$/gm, '<hr>');
-
-  // Inline: bold, italic, code, links
   out = out
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`(.+?)`/g, '<code>$1</code>')
     .replace(/\[(.+?)\]\((.+?)\)/g, (_, text, href) => `<a href="${sanitizeHref(href)}">${text}</a>`);
-
-  // FIX 3: Build output line by line, grouping consecutive list items into one <ul>
   const lines = out.split('\n');
   const result = [];
   let inList = false;
@@ -177,7 +334,6 @@ function renderMD(md) {
       result.push('<li>' + liMatch[1] + '</li>');
     } else {
       if (inList) { result.push('</ul>'); inList = false; }
-      // Wrap non-block lines in <p>
       if (line && !/^<[hup\/]|^<hr|^<ul|^<li/.test(line)) {
         result.push('<p>' + line + '</p>');
       } else {
@@ -191,19 +347,78 @@ function renderMD(md) {
 
 // ══════════════════════════════
 //  THEME
-// FIX 5: t-dark CSS class now defined in stylesheet above
 // ══════════════════════════════
+
+// FIX: Single custom event for mode changes so note widgets don't need
+// individual MutationObservers on document.body
+function emitModeChange() {
+  document.dispatchEvent(new CustomEvent('velinmodechange', { detail: { viewMode } }));
+}
+
 function applyTheme(t) {
   document.body.className = document.body.className
-    .split(' ')
-    .filter(c => !c.startsWith('t-') && c !== '')
-    .join(' ');
+    .split(' ').filter(c => !c.startsWith('t-') && c !== '').join(' ');
   document.body.classList.add('t-' + t);
   document.querySelectorAll('.theme-dot').forEach(d => d.classList.toggle('active', d.dataset.theme === t));
   S.theme = t; save();
 }
 document.querySelectorAll('.theme-dot').forEach(d => d.addEventListener('click', () => applyTheme(d.dataset.theme)));
 applyTheme(S.theme);
+
+// ══════════════════════════════
+//  BLUR MODE  (auto | on | off)
+//  auto = detect low-spec → disable; fast hardware → enable
+//  Cycles: auto → on → off → auto  (toolbar button or cycleBlurMode())
+//  Persisted in S.blurMode
+// ══════════════════════════════
+const BLUR_MODES = ['auto', 'on', 'off'];
+
+function detectLowSpec() {
+  const cores  = navigator.hardwareConcurrency || 0;  // available everywhere
+  const mem    = navigator.deviceMemory        || 0;  // Chrome/Edge only; 0 on Firefox/Safari
+  const motion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Vote system: 2+ signals → low-spec
+  let lowVotes = 0;
+  if (cores > 0 && cores <= 4)  lowVotes++;
+  if (mem   > 0 && mem   <= 4)  lowVotes++;
+  if (motion)                    lowVotes++;
+
+  // No reliable data (Firefox/Safari hide both) → assume capable, keep blur ON
+  const hasData = cores > 0 || mem > 0 || motion;
+  if (!hasData) return false;
+
+  return lowVotes >= 2;
+}
+
+function applyBlurMode(mode) {
+  const isLowSpec = detectLowSpec();
+  const blurOn = mode === 'on' || (mode === 'auto' && !isLowSpec);
+
+  // Single class toggle on body — CSS handles all blur surfaces at once
+  document.body.classList.toggle('no-blur', !blurOn);
+
+  const btn = document.getElementById('blur-toggle-btn');
+  if (btn) {
+    const autoLabel = isLowSpec ? 'blur: auto (off)' : 'blur: auto (on)';
+    const labels = { auto: autoLabel, on: 'blur: on', off: 'blur: off' };
+    btn.textContent = labels[mode] || autoLabel;
+    btn.dataset.blurMode = mode;
+    btn.classList.toggle('active', blurOn);
+  }
+
+  S.blurMode = mode;
+  save();
+}
+
+function cycleBlurMode() {
+  const current = S.blurMode || 'auto';
+  const next = BLUR_MODES[(BLUR_MODES.indexOf(current) + 1) % BLUR_MODES.length];
+  applyBlurMode(next);
+}
+
+// Apply persisted/default blur mode at startup (before paint)
+applyBlurMode(S.blurMode || 'auto');
 
 // ══════════════════════════════
 //  VIEW / EDIT MODE
@@ -223,12 +438,15 @@ function applyMode() {
   document.getElementById('mode-label').textContent = viewMode ? 'edit' : 'view';
   document.getElementById('mode-icon').textContent = viewMode ? '✎' : '✦';
   S.viewMode = viewMode; save();
+  emitModeChange(); // FIX: broadcast instead of per-widget MutationObserver
   if (typeof updateClockSize === 'function') {
     Object.values(wRefs).forEach(r => { if (r.cfg.type === 'clock') updateClockSize(r.cfg.id); });
   }
 }
 
 document.getElementById('mode-toggle').addEventListener('click', () => { viewMode = !viewMode; applyMode(); });
+const _blurBtn = document.getElementById('blur-toggle-btn');
+if (_blurBtn) _blurBtn.addEventListener('click', cycleBlurMode);
 document.addEventListener('keydown', e => {
   if (e.key === 'e' && !e.ctrlKey && !e.metaKey &&
     document.activeElement.tagName !== 'INPUT' &&
@@ -248,7 +466,7 @@ let imgBlur = (S.bg && S.bg.blur) || 0;
 
 function applyBg() {
   const bg = S.bg;
-  if (!bg) return; // Guard against undefined bg on first load
+  if (!bg) return;
   if (bg.type === 'solid') {
     bgLayer.style.background = bg.value || '#0d0d0f';
     bgImgLayer.style.opacity = 0;
@@ -302,20 +520,14 @@ function buildCustomGrad() {
 }
 ['grad-c1', 'grad-c2', 'grad-dir'].forEach(id => document.getElementById(id).addEventListener('input', buildCustomGrad));
 
-// FIX 7: Image stored in S.bg but save() will handle quota gracefully
 document.getElementById('img-upload').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
-  // FIX 9: Validate image file size before upload (limit to 2MB)
-  if (file.size > 2 * 1024 * 1024) {
-    showImgWarn();
-    return;
-  }
+  if (file.size > 2 * 1024 * 1024) { showImgWarn(); return; }
   const reader = new FileReader();
   reader.onload = ev => {
     S.bg = { type: 'image', imgData: ev.target.result, brightness: imgBrightness, blur: imgBlur };
-    applyBg();
-    save(); // save() will warn if quota exceeded
+    applyBg(); save();
   };
   reader.readAsDataURL(file);
 });
@@ -349,19 +561,14 @@ let _favCacheSaveTimer = null;
 function persistFaviconCacheNow() {
   try {
     const out = {};
-    for (const [hostname, entry] of _favCache) {
-      out[hostname] = { u: entry.url, t: entry.ts };
-    }
+    for (const [hostname, entry] of _favCache) { out[hostname] = { u: entry.url, t: entry.ts }; }
     localStorage.setItem(FAV_CACHE_STORAGE_KEY, JSON.stringify(out));
   } catch (e) { }
 }
 
 function schedulePersistFaviconCache() {
   if (_favCacheSaveTimer) clearTimeout(_favCacheSaveTimer);
-  _favCacheSaveTimer = setTimeout(() => {
-    _favCacheSaveTimer = null;
-    persistFaviconCacheNow();
-  }, FAV_CACHE_SAVE_DEBOUNCE_MS);
+  _favCacheSaveTimer = setTimeout(() => { _favCacheSaveTimer = null; persistFaviconCacheNow(); }, FAV_CACHE_SAVE_DEBOUNCE_MS);
 }
 
 function loadPersistedFaviconCache() {
@@ -373,22 +580,16 @@ function loadPersistedFaviconCache() {
     const entries = Object.entries(parsed)
       .filter(([hostname, entry]) => hostname && entry && typeof entry === 'object')
       .sort((a, b) => (a[1].t || 0) - (b[1].t || 0));
-
     entries.forEach(([hostname, entry]) => {
       _favCache.set(hostname, { url: entry.u ?? null, ts: entry.t || Date.now() });
     });
-
-    while (_favCache.size > FAV_CACHE_LIMIT) {
-      const oldestKey = _favCache.keys().next().value;
-      _favCache.delete(oldestKey);
-    }
+    while (_favCache.size > FAV_CACHE_LIMIT) { _favCache.delete(_favCache.keys().next().value); }
   } catch (e) { }
 }
 
 function getCachedFavicon(hostname) {
   if (!_favCache.has(hostname)) return undefined;
   const entry = _favCache.get(hostname);
-  // LRU touch
   _favCache.delete(hostname);
   _favCache.set(hostname, { url: entry.url, ts: Date.now() });
   return entry.url;
@@ -397,33 +598,32 @@ function getCachedFavicon(hostname) {
 function setCachedFavicon(hostname, value) {
   if (_favCache.has(hostname)) _favCache.delete(hostname);
   _favCache.set(hostname, { url: value ?? null, ts: Date.now() });
-  if (_favCache.size > FAV_CACHE_LIMIT) {
-    const oldestKey = _favCache.keys().next().value;
-    _favCache.delete(oldestKey);
-  }
+  if (_favCache.size > FAV_CACHE_LIMIT) { _favCache.delete(_favCache.keys().next().value); }
   schedulePersistFaviconCache();
 }
 
 function removeCachedFavicon(hostname) {
   if (!hostname) return;
   let changed = false;
-  if (_favCache.has(hostname)) {
-    _favCache.delete(hostname);
-    changed = true;
-  }
-  if (_favPending.has(hostname)) {
-    _favPending.delete(hostname);
-    changed = true;
-  }
+  if (_favCache.has(hostname)) { _favCache.delete(hostname); changed = true; }
+  if (_favPending.has(hostname)) { _favPending.delete(hostname); changed = true; }
   if (changed) schedulePersistFaviconCache();
 }
 
+// FIX: Null out onload/onerror inside the timeout callback so a late-arriving
+// image cannot trigger a redundant setCachedFavicon after the timeout fires.
 function _testImg(url) {
   return new Promise((res, rej) => {
     const img = new Image();
-    // FIX 10: Reduced favicon timeout from 5s to 2s to avoid page sluggishness
-    const t = setTimeout(rej, 2000);
-    img.onload = function () { clearTimeout(t); (this.naturalWidth > 1 && this.naturalHeight > 1) ? res(url) : rej(); };
+    const t = setTimeout(() => {
+      img.onload = null;
+      img.onerror = null;
+      rej();
+    }, 2000);
+    img.onload = function () {
+      clearTimeout(t);
+      (this.naturalWidth > 1 && this.naturalHeight > 1) ? res(url) : rej();
+    };
     img.onerror = () => { clearTimeout(t); rej(); };
     img.src = url;
   });
@@ -431,78 +631,47 @@ function _testImg(url) {
 
 async function resolveFaviconUrl(hostname) {
   if (!hostname) return null;
-
   const cached = getCachedFavicon(hostname);
   if (cached !== undefined) return cached;
-
   if (_favPending.has(hostname)) return _favPending.get(hostname);
 
   const pending = (async () => {
-    // Provider-first strategy: reliable hosted icon endpoint, then direct site fallback.
     const origin = 'https://' + hostname;
-
     const candidates = [
       `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
       origin + '/favicon.ico'
     ];
-
     for (const candidate of candidates) {
-      try {
-        const url = await _testImg(candidate).catch(() => null);
-        if (!url) continue;
-        setCachedFavicon(hostname, url);
-        return url;
-      } catch (e) { }
+      const url = await _testImg(candidate).catch(() => null);
+      if (url) { setCachedFavicon(hostname, url); return url; }
     }
-
-    // Cache misses too, to avoid repeated expensive retries.
     setCachedFavicon(hostname, null);
     return null;
   })();
 
   _favPending.set(hostname, pending);
-  return pending.finally(() => {
-    _favPending.delete(hostname);
-  });
+  return pending.finally(() => { _favPending.delete(hostname); });
 }
 
 function loadFavicon(fav, fallbackEl, hostname) {
-  if (!hostname) {
-    fallbackEl.style.display = 'flex';
-    fav.style.display = 'none';
-    fav.removeAttribute('src');
-    return;
-  }
-
-  fallbackEl.style.display = 'flex';
-  fav.style.display = 'none';
-  fav.removeAttribute('src');
-
+  if (!hostname) { fallbackEl.style.display = 'flex'; fav.style.display = 'none'; fav.removeAttribute('src'); return; }
+  fallbackEl.style.display = 'flex'; fav.style.display = 'none'; fav.removeAttribute('src');
   resolveFaviconUrl(hostname).then(url => {
     if (!url) return;
     fav.onload = () => { fallbackEl.style.display = 'none'; fav.style.display = 'block'; };
     fav.onerror = () => {
-      // Mark bad URLs as a miss so future renders use the fast letter fallback.
       setCachedFavicon(hostname, null);
-      fallbackEl.style.display = 'flex';
-      fav.style.display = 'none';
-      fav.removeAttribute('src');
+      fallbackEl.style.display = 'flex'; fav.style.display = 'none'; fav.removeAttribute('src');
     };
     fav.src = url;
   }).catch(() => {
-    fallbackEl.style.display = 'flex';
-    fav.style.display = 'none';
-    fav.removeAttribute('src');
+    fallbackEl.style.display = 'flex'; fav.style.display = 'none'; fav.removeAttribute('src');
   });
 }
 
 loadPersistedFaviconCache();
 window.addEventListener('beforeunload', () => {
-  if (_favCacheSaveTimer) {
-    clearTimeout(_favCacheSaveTimer);
-    _favCacheSaveTimer = null;
-    persistFaviconCacheNow();
-  }
+  if (_favCacheSaveTimer) { clearTimeout(_favCacheSaveTimer); _favCacheSaveTimer = null; persistFaviconCacheNow(); }
 });
 
 // ══════════════════════════════
@@ -539,70 +708,92 @@ function makeWidget(cfg) {
   return el;
 }
 
+// FIX: mousemove/mouseup listeners are attached only during an active drag and
+// removed immediately on mouseup — prevents accumulation of N*2 document
+// listeners for N widgets sitting idle.
 function makeDraggable(el, handle, id) {
-  let ox = 0, oy = 0, dr = false;
-  const onHandleMouseDown = e => {
-    if (viewMode || e.target.classList.contains('wp-btn')) return;
-    dr = true; ox = e.clientX - el.offsetLeft; oy = e.clientY - el.offsetTop;
-    el.classList.add('dragging'); e.preventDefault();
-  };
-  const onDocMouseMove = e => {
-    if (!dr) return;
+  let ox = 0, oy = 0;
+
+  const onMove = e => {
     el.style.left = snap(e.clientX - ox) + 'px';
     el.style.top = snap(e.clientY - oy) + 'px';
   };
-  const onDocMouseUp = () => {
-    if (!dr) return;
-    dr = false; el.classList.remove('dragging');
+
+  const onUp = () => {
+    el.classList.remove('dragging');
     if (wRefs[id]) { wRefs[id].cfg.x = el.offsetLeft; wRefs[id].cfg.y = el.offsetTop; }
     saveWidgets();
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+
+  const onHandleMouseDown = e => {
+    if (viewMode || e.target.classList.contains('wp-btn')) return;
+    ox = e.clientX - el.offsetLeft;
+    oy = e.clientY - el.offsetTop;
+    el.classList.add('dragging');
+    e.preventDefault();
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   };
 
   handle.addEventListener('mousedown', onHandleMouseDown);
-  document.addEventListener('mousemove', onDocMouseMove);
-  document.addEventListener('mouseup', onDocMouseUp);
 
+  // Cleanup only needs to remove the handle listener; move/up are self-removing.
   ensureCleanups(id).push(() => {
     handle.removeEventListener('mousedown', onHandleMouseDown);
-    document.removeEventListener('mousemove', onDocMouseMove);
-    document.removeEventListener('mouseup', onDocMouseUp);
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
   });
 }
 
+// FIX: Same attach-on-start / detach-on-end pattern for resize.
+// Also batches offsetWidth/offsetHeight reads into a single rAF to avoid
+// forced layout reflows on every pixel of drag movement.
 function makeResizable(el, handle, id) {
-  let rs = false, sx = 0, sy = 0, sw = 0, sh = 0;
+  let sx = 0, sy = 0, sw = 0, sh = 0;
   let resizeRaf = 0;
-  const onHandleMouseDown = e => {
-    if (viewMode) return;
-    rs = true; sx = e.clientX; sy = e.clientY; sw = el.offsetWidth; sh = el.offsetHeight;
-    el.classList.add('resizing'); e.preventDefault(); e.stopPropagation();
-  };
-  const onDocMouseMove = e => {
-    if (!rs) return;
-    el.style.width = snap(Math.max(160, sw + (e.clientX - sx))) + 'px';
-    el.style.height = snap(Math.max(60, sh + (e.clientY - sy))) + 'px';
-    if (wRefs[id]) { wRefs[id].cfg.w = el.offsetWidth; wRefs[id].cfg.h = el.offsetHeight; }
-    if (wRefs[id] && wRefs[id].cfg.type === 'clock' && !resizeRaf) {
+  let pendingW = 0, pendingH = 0;
+
+  const onMove = e => {
+    pendingW = snap(Math.max(160, sw + (e.clientX - sx)));
+    pendingH = snap(Math.max(60, sh + (e.clientY - sy)));
+    if (!resizeRaf) {
       resizeRaf = requestAnimationFrame(() => {
         resizeRaf = 0;
+        el.style.width = pendingW + 'px';
+        el.style.height = pendingH + 'px';
+        if (wRefs[id]) { wRefs[id].cfg.w = pendingW; wRefs[id].cfg.h = pendingH; }
         if (wRefs[id] && wRefs[id].cfg.type === 'clock') updateClockSize(id);
       });
     }
   };
-  const onDocMouseUp = () => {
-    if (!rs) return;
-    rs = false; el.classList.remove('resizing'); saveWidgets();
+
+  const onUp = () => {
+    el.classList.remove('resizing');
+    saveWidgets();
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    if (resizeRaf) { cancelAnimationFrame(resizeRaf); resizeRaf = 0; }
+  };
+
+  const onHandleMouseDown = e => {
+    if (viewMode) return;
+    sx = e.clientX; sy = e.clientY;
+    sw = el.offsetWidth; sh = el.offsetHeight;
+    el.classList.add('resizing');
+    e.preventDefault(); e.stopPropagation();
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   };
 
   handle.addEventListener('mousedown', onHandleMouseDown);
-  document.addEventListener('mousemove', onDocMouseMove);
-  document.addEventListener('mouseup', onDocMouseUp);
 
   ensureCleanups(id).push(() => {
     handle.removeEventListener('mousedown', onHandleMouseDown);
-    document.removeEventListener('mousemove', onDocMouseMove);
-    document.removeEventListener('mouseup', onDocMouseUp);
-    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    if (resizeRaf) { cancelAnimationFrame(resizeRaf); resizeRaf = 0; }
   });
 }
 
@@ -620,6 +811,8 @@ function buildWidgetBody(type, body, cfg, id) {
 }
 
 // ── CLOCK ──
+// FIX: updateClockSize caches dimensions and only reads offsetWidth when
+// called from resize (where dimensions actually changed), not every tick.
 function updateClockSize(id) {
   const r = wRefs[id]; if (!r) return;
   const el = r.el, cfg = r.cfg;
@@ -632,6 +825,8 @@ function updateClockSize(id) {
   if (dig) dig.style.fontSize = Math.max(28, sz) + 'px';
   const asz = Math.min(ww * .75, wh * .75, 200);
   if (ana) { ana.width = Math.max(100, asz); ana.height = Math.max(100, asz); }
+  // Cache so tick doesn't need to re-read layout
+  r._cachedW = ww; r._cachedH = wh;
 }
 
 function buildClock(body, cfg, id) {
@@ -664,39 +859,33 @@ function buildClock(body, cfg, id) {
   let lastMinute = -1;
 
   function scheduleNextTick() {
-    // Align to the next second boundary to reduce timer drift over long sessions.
     const delay = Math.max(100, 1000 - new Date().getMilliseconds());
     tickTimer = setTimeout(tick, delay);
   }
 
   function tick() {
-    if (!document.getElementById('wp-' + id)) {
-      tickTimer = null;
-      return;
-    }
-
-    // Skip rendering while backgrounded; visibility handler resumes accurately.
-    if (document.hidden) {
-      scheduleNextTick();
-      return;
-    }
+    if (!document.getElementById('wp-' + id)) { tickTimer = null; return; }
+    if (document.hidden) { scheduleNextTick(); return; }
 
     const d = new Date(), h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
-
-    if (s === lastSecond) {
-      scheduleNextTick();
-      return;
-    }
+    if (s === lastSecond) { scheduleNextTick(); return; }
     lastSecond = s;
 
-    updateClockSize(id);
+    // FIX: Only call updateClockSize in analog mode tick (canvas needs dimensions);
+    // digital mode reads cached values to avoid a layout reflow every second.
+    const r = wRefs[id];
+    if (cfg.clockMode === 'analog') {
+      updateClockSize(id);
+    }
+
     dig.innerHTML = `<span>${pad(h)}:${pad(m)}</span><span style="font-size:.42em;color:var(--text2);vertical-align:middle;margin-left:2px;">:${pad(s)}</span>`;
     if (m !== lastMinute) {
       dateEl.textContent = DAY_NAMES[d.getDay()] + ', ' + MONTH_NAMES[d.getMonth()] + ' ' + d.getDate();
       lastMinute = m;
     }
 
-    if (cfg.clockMode === 'analog' && ana.style.display !== 'none') {
+    // FIX: Skip canvas draw entirely when widget is hidden (IntersectionObserver)
+    if (cfg.clockMode === 'analog' && ana.style.display !== 'none' && r && r._isVisible !== false) {
       const W = ana.width, H = ana.height, R = W * .42, cx = W / 2, cy = H / 2;
       const ctx = ana.getContext('2d');
       const isDark = S.theme === 'dark' || S.theme === 'glass';
@@ -732,13 +921,18 @@ function buildClock(body, cfg, id) {
     scheduleNextTick();
   }
 
+  // FIX: IntersectionObserver skips canvas paint when widget is off-screen
+  const visObs = new IntersectionObserver(entries => {
+    const r = wRefs[id];
+    if (r) r._isVisible = entries[0].isIntersecting;
+  }, { threshold: 0 });
+  const wpEl = document.getElementById('wp-' + id);
+  if (wpEl) visObs.observe(wpEl);
+
   const onVisibilityChange = () => {
     if (document.hidden) return;
     lastSecond = -1;
-    if (tickTimer) {
-      clearTimeout(tickTimer);
-      tickTimer = null;
-    }
+    if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; }
     tick();
   };
 
@@ -746,15 +940,11 @@ function buildClock(body, cfg, id) {
 
   tick();
 
-  // FIX 4 (cleanup): Clock registers its own _cleanup; other widgets that also need
-  // cleanup use _cleanups array so they don't overwrite each other
   wRefs[id]._cleanups = wRefs[id]._cleanups || [];
   wRefs[id]._cleanups.push(() => {
     document.removeEventListener('visibilitychange', onVisibilityChange);
-    if (tickTimer) {
-      clearTimeout(tickTimer);
-      tickTimer = null;
-    }
+    if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; }
+    visObs.disconnect();
   });
 }
 
@@ -772,7 +962,6 @@ function buildBookmarkWidget(body, cfg, id) {
   const fav = document.createElement('img'); fav.className = 'bm-widget-favicon';
 
   const hostname = getHostname(cfg.bmUrl);
-
   const letter = document.createElement('div'); letter.className = 'bm-favicon-letter';
   letter.textContent = (cfg.bmName || hostname || '?')[0].toUpperCase();
   letter.style.display = 'none';
@@ -881,6 +1070,8 @@ function buildNote(body, cfg, id) {
     acts.insertBefore(cb, acts.firstChild);
   }
 
+  // FIX: Use single custom event from applyMode() instead of a MutationObserver
+  // per note widget. Multiple open notes previously each observed document.body.
   function syncViewMode() {
     if (viewMode) {
       prev.innerHTML = renderMD(cfg.noteContent);
@@ -889,12 +1080,11 @@ function buildNote(body, cfg, id) {
     }
   }
 
-  const obs = new MutationObserver(() => syncViewMode());
-  obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  const onModeChange = () => syncViewMode();
+  document.addEventListener('velinmodechange', onModeChange);
 
-  // FIX 4: Use _cleanups array instead of overwriting _cleanup
   wRefs[id]._cleanups = wRefs[id]._cleanups || [];
-  wRefs[id]._cleanups.push(() => obs.disconnect());
+  wRefs[id]._cleanups.push(() => document.removeEventListener('velinmodechange', onModeChange));
 
   body.style.overflow = 'hidden';
   body.appendChild(toolbar); body.appendChild(ta); body.appendChild(prev);
@@ -916,14 +1106,9 @@ function buildPomodoro(body, cfg, id) {
 
   function getDefaultState() {
     return {
-      mode: 'focus',
-      status: 'idle',
-      startedAt: null,
-      endsAt: null,
+      mode: 'focus', status: 'idle', startedAt: null, endsAt: null,
       sessionsCompleted: Number(cfg.pomoSessions || 0),
-      version: STATE_VERSION,
-      updatedAt: 0,
-      writerId: ''
+      version: STATE_VERSION, updatedAt: 0, writerId: ''
     };
   }
 
@@ -944,18 +1129,12 @@ function buildPomodoro(body, cfg, id) {
   let state = normalizeState(cfg.pomoState || {
     mode: cfg.pomoMode || 'focus',
     status: (cfg.pomoRunning ? 'running' : 'idle'),
-    startedAt: null,
-    endsAt: null,
+    startedAt: null, endsAt: null,
     sessionsCompleted: Number(cfg.pomoSessions || 0),
-    version: STATE_VERSION,
-    updatedAt: 0,
-    writerId: ''
+    version: STATE_VERSION, updatedAt: 0, writerId: ''
   });
 
-  function saveWidgetsImmediate() {
-    S.widgets = Object.values(wRefs).map(r => r.cfg);
-    save(true);
-  }
+  function saveWidgetsImmediate() { S.widgets = Object.values(wRefs).map(r => r.cfg); save(true); }
 
   function readLock() {
     try {
@@ -966,18 +1145,12 @@ function buildPomodoro(body, cfg, id) {
       if (typeof parsed.ownerId !== 'string') return null;
       if (!Number.isFinite(+parsed.expiresAt)) return null;
       return { ownerId: parsed.ownerId, expiresAt: Math.floor(+parsed.expiresAt) };
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   function writeLock(ownerId, expiresAt) {
-    try {
-      localStorage.setItem(LOCK_KEY, JSON.stringify({ ownerId, expiresAt }));
-      return true;
-    } catch (e) {
-      return false;
-    }
+    try { localStorage.setItem(LOCK_KEY, JSON.stringify({ ownerId, expiresAt })); return true; }
+    catch (e) { return false; }
   }
 
   function isLockOwnedByMe() {
@@ -1005,10 +1178,8 @@ function buildPomodoro(body, cfg, id) {
   }
 
   function releaseLock() {
-    try {
-      const lock = readLock();
-      if (lock && lock.ownerId === TAB_ID) localStorage.removeItem(LOCK_KEY);
-    } catch (e) { }
+    try { const lock = readLock(); if (lock && lock.ownerId === TAB_ID) localStorage.removeItem(LOCK_KEY); }
+    catch (e) { }
   }
 
   function isRemoteFresher(remote, local) {
@@ -1025,16 +1196,26 @@ function buildPomodoro(body, cfg, id) {
     return merged;
   }
 
+  // FIX: syncStateFromStorage throttled at 300ms minimum between calls so
+  // rapid focus/visibilitychange events can't block tab activation with a
+  // synchronous JSON.parse on every fired event.
+  const SYNC_MIN_INTERVAL_MS = 300;
+  let lastSyncCallAt = 0;
+
   function syncStateFromStorage(force = false) {
     const now = Date.now();
     if (!force) {
       if (document.hidden) return;
       if ((now - lastStorageSyncAt) < STORAGE_SYNC_INTERVAL_MS) return;
     }
+    // Throttle even forced calls to 300ms to prevent event-storm stalls
+    if ((now - lastSyncCallAt) < SYNC_MIN_INTERVAL_MS) return;
+    lastSyncCallAt = now;
     lastStorageSyncAt = now;
 
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      // Read from LS fallback key (IDB writes are async; LS is always up-to-date on unload)
+      const raw = localStorage.getItem(LS_FALLBACK_KEY) || localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!parsed || !Array.isArray(parsed.widgets)) return;
@@ -1055,77 +1236,63 @@ function buildPomodoro(body, cfg, id) {
     state.updatedAt = Date.now();
     state.writerId = TAB_ID;
     cfg.pomoState = {
-      mode: state.mode,
-      status: state.status,
-      startedAt: state.startedAt,
-      endsAt: state.endsAt,
-      sessionsCompleted: state.sessionsCompleted,
-      version: state.version,
-      updatedAt: state.updatedAt,
-      writerId: state.writerId
+      mode: state.mode, status: state.status, startedAt: state.startedAt,
+      endsAt: state.endsAt, sessionsCompleted: state.sessionsCompleted,
+      version: state.version, updatedAt: state.updatedAt, writerId: state.writerId
     };
-    // Keep legacy field updated for existing UI/read paths.
     cfg.pomoSessions = state.sessionsCompleted;
     saveWidgetsImmediate();
   }
 
-  function getPhaseDurationMs(mode) {
-    return MODES[mode] * 1000;
-  }
+  function getPhaseDurationMs(mode) { return MODES[mode] * 1000; }
 
   function getRemainingMs(nowMs) {
-    if (state.status === 'running' && typeof state.endsAt === 'number') {
-      return Math.max(0, state.endsAt - nowMs);
-    }
-    // In paused state we store remaining milliseconds in endsAt.
-    if (state.status === 'paused' && typeof state.endsAt === 'number') {
-      return Math.max(0, state.endsAt);
-    }
+    if (state.status === 'running' && typeof state.endsAt === 'number') return Math.max(0, state.endsAt - nowMs);
+    if (state.status === 'paused' && typeof state.endsAt === 'number') return Math.max(0, state.endsAt);
     return getPhaseDurationMs(state.mode);
   }
 
-  function setIdleAtWork() {
-    state.mode = 'focus';
-    state.status = 'idle';
-    state.startedAt = null;
-    state.endsAt = null;
-  }
-
-  function setRunningForCurrentMode(nowMs, durationMs) {
-    state.status = 'running';
-    state.startedAt = nowMs;
-    state.endsAt = nowMs + durationMs;
-  }
+  function setIdleAtWork() { state.mode = 'focus'; state.status = 'idle'; state.startedAt = null; state.endsAt = null; }
+  function setRunningForCurrentMode(nowMs, durationMs) { state.status = 'running'; state.startedAt = nowMs; state.endsAt = nowMs + durationMs; }
 
   function applyCatchUp() {
     if (!isLockOwnedByMe() && !tryAcquireLock(false)) return false;
     renewLockIfNeeded();
     if (state.status !== 'running' || typeof state.endsAt !== 'number') return false;
-
     const now = Date.now();
     let changed = false;
-
-    // Process overdue running phases until we hit work-idle boundary.
     while (state.status === 'running' && typeof state.endsAt === 'number' && now >= state.endsAt) {
       if (state.mode === 'focus') {
         state.sessionsCompleted += 1;
         state.mode = (state.sessionsCompleted % 4 === 0) ? 'longBreak' : 'shortBreak';
         const nextStart = state.endsAt;
-        state.status = 'running';
-        state.startedAt = nextStart;
+        state.status = 'running'; state.startedAt = nextStart;
         state.endsAt = nextStart + getPhaseDurationMs(state.mode);
       } else {
-        // Break completion transitions to work, but work must not auto-start.
         setIdleAtWork();
       }
       changed = true;
-
-      // Stop catch-up when we land on work and require manual start.
       if (state.mode === 'focus' && state.status === 'idle') break;
     }
-
     if (changed) persistState();
     return changed;
+  }
+
+  function notifySessionComplete(completedMode) {
+    const titles = {
+      focus: '🎯 Focus session done!',
+      shortBreak: '☕ Short break over',
+      longBreak: '🏆 Long break complete'
+    };
+    const bodies = {
+      focus: 'Time for a break',
+      shortBreak: 'Back to focus',
+      longBreak: `${state.sessionsCompleted} sessions total`
+    };
+    showNotification(titles[completedMode] || 'Session complete', { 
+      body: bodies[completedMode] || '',
+      tag: 'pomodoro-' + id 
+    });
   }
 
   body.innerHTML = `
@@ -1145,15 +1312,20 @@ function buildPomodoro(body, cfg, id) {
 
   function upd() {
     syncStateFromStorage(false);
+    const prevMode = state.mode;
+    const prevStatus = state.status;
     applyCatchUp();
-    if (state.status !== 'running' && isLockOwnedByMe()) {
-      releaseLock();
+    
+    // Notify when session just finished (status changed from running → paused/idle)
+    if (prevStatus === 'running' && (state.status === 'paused' || state.status === 'idle')) {
+      notifySessionComplete(prevMode);
     }
+
+    if (state.status !== 'running' && isLockOwnedByMe()) releaseLock();
     const now = Date.now();
     const remainingMs = getRemainingMs(now);
     const remainingSec = Math.ceil(remainingMs / 1000);
     const phaseTotalMs = getPhaseDurationMs(state.mode);
-
     document.getElementById('pt-' + id).textContent = pad(Math.floor(remainingSec / 60)) + ':' + pad(remainingSec % 60);
     document.getElementById('pl-' + id).textContent = state.mode === 'focus' ? 'focus' : state.mode === 'shortBreak' ? 'short break' : 'long break';
     document.getElementById('pb-' + id).style.width = (Math.max(0, Math.min(1, remainingMs / phaseTotalMs)) * 100) + '%';
@@ -1164,82 +1336,53 @@ function buildPomodoro(body, cfg, id) {
 
   document.getElementById('ps-' + id).addEventListener('click', () => {
     const now = Date.now();
-    tryAcquireLock(true);
-    syncStateFromStorage(true);
-    applyCatchUp();
-
+    tryAcquireLock(true); syncStateFromStorage(true); applyCatchUp();
     if (state.status === 'running') {
       const remainingMs = getRemainingMs(now);
-      state.status = 'paused';
-      state.startedAt = null;
-      state.endsAt = remainingMs;
-      persistState();
-      releaseLock();
+      state.status = 'paused'; state.startedAt = null; state.endsAt = remainingMs;
+      persistState(); releaseLock();
     } else {
       const durationMs = (state.status === 'paused')
         ? Math.max(1000, typeof state.endsAt === 'number' ? state.endsAt : getPhaseDurationMs(state.mode))
         : getPhaseDurationMs(state.mode);
       setRunningForCurrentMode(now, durationMs);
-      persistState();
-      renewLockIfNeeded();
+      persistState(); renewLockIfNeeded();
     }
     upd();
   });
 
   document.getElementById('pr-' + id).addEventListener('click', () => {
-    tryAcquireLock(true);
-    state.status = 'idle';
-    state.startedAt = null;
-    state.endsAt = null;
-    persistState();
-    releaseLock();
-    upd();
+    tryAcquireLock(true); state.status = 'idle'; state.startedAt = null; state.endsAt = null;
+    persistState(); releaseLock(); upd();
   });
 
   body.querySelectorAll('.pomo-mode').forEach(mb => mb.addEventListener('click', () => {
     const nextMode = mb.dataset.m;
     if (!MODES[nextMode]) return;
-    tryAcquireLock(true);
-    state.mode = nextMode;
-    state.status = 'idle';
-    state.startedAt = null;
-    state.endsAt = null;
-    persistState();
-    releaseLock();
-    upd();
+    tryAcquireLock(true); state.mode = nextMode; state.status = 'idle';
+    state.startedAt = null; state.endsAt = null;
+    persistState(); releaseLock(); upd();
   }));
 
-  function onWindowResume() {
-    syncStateFromStorage(true);
-    applyCatchUp();
-    upd();
-  }
-
+  // FIX: Both focus and visibilitychange call syncStateFromStorage which is now
+  // throttled at 300ms, preventing event-storm stalls on rapid tab switching.
+  function onWindowResume() { syncStateFromStorage(true); applyCatchUp(); upd(); }
   function onStorageSync(e) {
     if (e.key !== STORAGE_KEY && e.key !== LOCK_KEY) return;
-    syncStateFromStorage(true);
-    upd();
+    syncStateFromStorage(true); upd();
   }
-
-  function onBeforeUnload() {
-    releaseLock();
-  }
+  function onBeforeUnload() { releaseLock(); }
 
   window.addEventListener('focus', onWindowResume);
   document.addEventListener('visibilitychange', onWindowResume);
   window.addEventListener('storage', onStorageSync);
   window.addEventListener('beforeunload', onBeforeUnload);
 
-  // Regular UI tick; catch-up also runs here.
   uiTimer = setInterval(upd, 1000);
 
-  // FIX 4: Use _cleanups array
   wRefs[id]._cleanups = wRefs[id]._cleanups || [];
   wRefs[id]._cleanups.push(() => {
-    if (uiTimer) {
-      clearInterval(uiTimer);
-      uiTimer = null;
-    }
+    if (uiTimer) { clearInterval(uiTimer); uiTimer = null; }
     window.removeEventListener('focus', onWindowResume);
     document.removeEventListener('visibilitychange', onWindowResume);
     window.removeEventListener('storage', onStorageSync);
@@ -1247,7 +1390,6 @@ function buildPomodoro(body, cfg, id) {
     releaseLock();
   });
 
-  // Apply catch-up on widget load.
   syncStateFromStorage(true);
   upd();
 }
@@ -1256,9 +1398,7 @@ function buildPomodoro(body, cfg, id) {
 //  WIDGET CLOSE — with cleanup
 // ══════════════════════════════
 function closeWidget(id) {
-  const ref = wRefs[id];
-  if (!ref) return;
-  // FIX 4: Run all cleanups, not just one
+  const ref = wRefs[id]; if (!ref) return;
   if (Array.isArray(ref._cleanups)) ref._cleanups.forEach(fn => { try { fn(); } catch (e) { } });
   ref.el.remove();
   delete wRefs[id];
@@ -1267,10 +1407,8 @@ function closeWidget(id) {
 }
 
 canvas.addEventListener('click', e => {
-  const closeBtn = e.target.closest('.wp-close');
-  if (!closeBtn) return;
-  const wp = closeBtn.closest('.wp');
-  if (!wp) return;
+  const closeBtn = e.target.closest('.wp-close'); if (!closeBtn) return;
+  const wp = closeBtn.closest('.wp'); if (!wp) return;
   const id = wp.id.replace('wp-', '');
   closeWidget(id);
 });
@@ -1305,16 +1443,11 @@ function renderBmSaved() {
     loadFavicon(fav, ltr, hostname);
 
     const nm = document.createElement('span'); nm.textContent = bm.name;
-
     const del = document.createElement('div'); del.className = 'bm-saved-del'; del.textContent = '×';
     del.addEventListener('click', e => {
       e.stopPropagation();
       const idx = S.bookmarks.indexOf(bm);
-      if (idx !== -1) {
-        S.bookmarks.splice(idx, 1);
-        removeCachedFavicon(getHostname(bm.url));
-        save();
-      }
+      if (idx !== -1) { S.bookmarks.splice(idx, 1); removeCachedFavicon(getHostname(bm.url)); save(); }
       renderBmSaved();
     });
 
@@ -1349,27 +1482,15 @@ document.getElementById('bm-url-inp').addEventListener('keydown', e => { if (e.k
 
 // ══════════════════════════════
 //  PANEL OUTSIDE-CLICK HANDLING
-// FIX 2: Use a clean mousedown-start / mouseup-end drag detection.
-//        The click listener checks a flag that is only set when the pointer
-//        actually moved while the button was held — preventing false dismissal.
 // ══════════════════════════════
 let _dragMoved = false;
 let _dragStarted = false;
 
-document.addEventListener('mousedown', () => {
-  _dragStarted = true;
-  _dragMoved = false;
-});
-document.addEventListener('mousemove', e => {
-  if (_dragStarted && e.buttons === 1) _dragMoved = true;
-});
-document.addEventListener('mouseup', () => {
-  _dragStarted = false;
-  // _dragMoved intentionally left true until click fires (same event loop tick)
-});
+document.addEventListener('mousedown', () => { _dragStarted = true; _dragMoved = false; });
+document.addEventListener('mousemove', e => { if (_dragStarted && e.buttons === 1) _dragMoved = true; });
+document.addEventListener('mouseup', () => { _dragStarted = false; });
 
 document.addEventListener('click', e => {
-  // If the pointer moved during this press, it was a drag-release — don't close panels
   if (_dragMoved) { _dragMoved = false; return; }
   _dragMoved = false;
   if (!e.target.closest('#bm-panel') && !e.target.closest('#bm-launcher-btn')) bmPanel.classList.remove('open');
@@ -1378,8 +1499,6 @@ document.addEventListener('click', e => {
 
 // ══════════════════════════════
 //  FREE TEXT
-// FIX 8: Each FT note's drag listeners are attached to the wrap element,
-//        not to document, so they don't accumulate globally.
 // ══════════════════════════════
 let ftMode = false;
 if (!S.ftNotes) S.ftNotes = [];
@@ -1410,8 +1529,7 @@ function applyFTStyles(ta, noteObj) {
   ta.style.fontSize = size + 'px';
   ta.style.fontWeight = String(weight);
   ta.style.color = noteObj.color || 'var(--text)';
-  noteObj.size = size;
-  noteObj.weight = weight;
+  noteObj.size = size; noteObj.weight = weight;
 }
 
 function positionFtStylebar() {
@@ -1431,10 +1549,7 @@ function applyFTRotation(wrap, noteObj) {
 
 function setActiveFT(ref) {
   activeFT = (viewMode || !ref) ? null : ref;
-  if (!activeFT) {
-    ftStyleBar.classList.remove('show');
-    return;
-  }
+  if (!activeFT) { ftStyleBar.classList.remove('show'); return; }
   ftBoldBtn.classList.toggle('active', activeFT.noteObj.weight === 600);
   ftColorInp.value = activeFT.noteObj.color || '#f0ede8';
   ftSizeRead.textContent = (activeFT.noteObj.size || 14) + 'px';
@@ -1448,57 +1563,42 @@ ftSizeDecBtn.addEventListener('click', () => {
   if (!activeFT) return;
   activeFT.noteObj.size = clampFtSize((activeFT.noteObj.size || 14) - 1);
   applyFTStyles(activeFT.ta, activeFT.noteObj);
-  ftSizeRead.textContent = activeFT.noteObj.size + 'px';
-  save();
-  activeFT.ta.focus();
+  ftSizeRead.textContent = activeFT.noteObj.size + 'px'; save(); activeFT.ta.focus();
 });
 ftSizeIncBtn.addEventListener('click', () => {
   if (!activeFT) return;
   activeFT.noteObj.size = clampFtSize((activeFT.noteObj.size || 14) + 1);
   applyFTStyles(activeFT.ta, activeFT.noteObj);
-  ftSizeRead.textContent = activeFT.noteObj.size + 'px';
-  save();
-  activeFT.ta.focus();
+  ftSizeRead.textContent = activeFT.noteObj.size + 'px'; save(); activeFT.ta.focus();
 });
 ftRotDecBtn.addEventListener('click', () => {
   if (!activeFT) return;
   activeFT.noteObj.rot = normalizeRotation((activeFT.noteObj.rot || 0) - 5);
   applyFTRotation(activeFT.wrap, activeFT.noteObj);
-  ftRotRead.textContent = activeFT.noteObj.rot + '°';
-  positionFtStylebar();
-  save();
-  activeFT.ta.focus();
+  ftRotRead.textContent = activeFT.noteObj.rot + '°'; positionFtStylebar(); save(); activeFT.ta.focus();
 });
 ftRotIncBtn.addEventListener('click', () => {
   if (!activeFT) return;
   activeFT.noteObj.rot = normalizeRotation((activeFT.noteObj.rot || 0) + 5);
   applyFTRotation(activeFT.wrap, activeFT.noteObj);
-  ftRotRead.textContent = activeFT.noteObj.rot + '°';
-  positionFtStylebar();
-  save();
-  activeFT.ta.focus();
+  ftRotRead.textContent = activeFT.noteObj.rot + '°'; positionFtStylebar(); save(); activeFT.ta.focus();
 });
 ftBoldBtn.addEventListener('click', () => {
   if (!activeFT) return;
   activeFT.noteObj.weight = activeFT.noteObj.weight === 600 ? 400 : 600;
   applyFTStyles(activeFT.ta, activeFT.noteObj);
-  ftBoldBtn.classList.toggle('active', activeFT.noteObj.weight === 600);
-  save();
-  activeFT.ta.focus();
+  ftBoldBtn.classList.toggle('active', activeFT.noteObj.weight === 600); save(); activeFT.ta.focus();
 });
 ftColorInp.addEventListener('input', () => {
   if (!activeFT) return;
   activeFT.noteObj.color = ftColorInp.value;
-  applyFTStyles(activeFT.ta, activeFT.noteObj);
-  save();
+  applyFTStyles(activeFT.ta, activeFT.noteObj); save();
 });
 ftDeleteBtn.addEventListener('click', () => {
   if (!activeFT) return;
   const idx = S.ftNotes.indexOf(activeFT.noteObj);
   if (idx !== -1) S.ftNotes.splice(idx, 1);
-  activeFT.wrap.remove();
-  setActiveFT(null);
-  save();
+  activeFT.wrap.remove(); setActiveFT(null); save();
 });
 window.addEventListener('resize', positionFtStylebar);
 
@@ -1515,14 +1615,8 @@ function makeFTNote(noteObj) {
   applyFTRotation(wrap, noteObj);
 
   const del = document.createElement('button'); del.className = 'ft-del-btn'; del.textContent = '×';
-  del.addEventListener('click', () => {
-    const i = S.ftNotes.indexOf(noteObj);
-    if (i !== -1) S.ftNotes.splice(i, 1);
-    save(); wrap.remove();
-  });
 
-  const rz = document.createElement('div');
-  rz.className = 'ft-resize';
+  const rz = document.createElement('div'); rz.className = 'ft-resize';
   rz.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10"><path d="M9 1L1 9M9 5L5 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 
   const ta = document.createElement('textarea'); ta.className = 'ft-note';
@@ -1531,63 +1625,46 @@ function makeFTNote(noteObj) {
   applyFTStyles(ta, noteObj);
 
   ta.addEventListener('input', () => {
-    if (noteObj.h > 0) {
-      ta.style.overflowY = 'auto';
-    } else {
-      ta.style.height = 'auto';
-      ta.style.height = ta.scrollHeight + 'px';
-    }
-    noteObj.text = ta.value; save();
-    positionFtStylebar();
+    if (noteObj.h > 0) { ta.style.overflowY = 'auto'; } else { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+    noteObj.text = ta.value; save(); positionFtStylebar();
   });
-
   ta.addEventListener('focus', () => setActiveFT({ noteObj, ta, wrap }));
   ta.addEventListener('click', () => setActiveFT({ noteObj, ta, wrap }));
-  ta.addEventListener('blur', () => {
-    setTimeout(() => {
-      if (document.activeElement !== ta) setActiveFT(null);
-    }, 120);
-  });
+  ta.addEventListener('blur', () => { setTimeout(() => { if (document.activeElement !== ta) setActiveFT(null); }, 120); });
 
-  // FIX 8: mousemove and mouseup listeners on document, but stored as named
-  // functions and removed when the drag ends (or when the note is deleted).
+  // Drag: attach to document only during active drag, remove on mouseup
   let dr2 = false, ox2 = 0, oy2 = 0;
   let rs2 = false, rsx = 0, rsy = 0, rsw = 0, rsh = 0;
 
-  function onMove(e) {
+  const onMove = e => {
     if (!dr2) return;
     wrap.style.left = (e.clientX - ox2) + 'px';
     wrap.style.top = (e.clientY - oy2) + 'px';
     if (activeFT && activeFT.noteObj === noteObj) positionFtStylebar();
-  }
-  function onUp() {
+  };
+  const onUp = () => {
     if (!dr2) return;
     dr2 = false;
     noteObj.x = wrap.offsetLeft; noteObj.y = wrap.offsetTop; save();
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     if (activeFT && activeFT.noteObj === noteObj) positionFtStylebar();
-  }
+  };
 
-  function onResizeMove(e) {
+  const onResizeMove = e => {
     if (!rs2) return;
-    const newW = Math.max(90, rsw + (e.clientX - rsx));
-    const newH = Math.max(24, rsh + (e.clientY - rsy));
-    noteObj.w = Math.round(newW);
-    noteObj.h = Math.round(newH);
-    ta.style.width = noteObj.w + 'px';
-    ta.style.height = noteObj.h + 'px';
-    ta.style.overflowY = 'auto';
+    noteObj.w = Math.round(Math.max(90, rsw + (e.clientX - rsx)));
+    noteObj.h = Math.round(Math.max(24, rsh + (e.clientY - rsy)));
+    ta.style.width = noteObj.w + 'px'; ta.style.height = noteObj.h + 'px'; ta.style.overflowY = 'auto';
     if (activeFT && activeFT.noteObj === noteObj) positionFtStylebar();
-  }
-
-  function onResizeUp() {
+  };
+  const onResizeUp = () => {
     if (!rs2) return;
     rs2 = false;
     document.removeEventListener('mousemove', onResizeMove);
     document.removeEventListener('mouseup', onResizeUp);
     save();
-  }
+  };
 
   wrap.addEventListener('mousedown', e => {
     if (viewMode || (e.target === ta && document.activeElement === ta) || e.target === del || e.target.closest('.ft-resize')) return;
@@ -1598,35 +1675,27 @@ function makeFTNote(noteObj) {
 
   rz.addEventListener('mousedown', e => {
     if (viewMode) return;
-    e.preventDefault();
-    e.stopPropagation();
-    rs2 = true;
-    rsx = e.clientX;
-    rsy = e.clientY;
-    rsw = ta.offsetWidth;
-    rsh = ta.offsetHeight;
+    e.preventDefault(); e.stopPropagation();
+    rs2 = true; rsx = e.clientX; rsy = e.clientY; rsw = ta.offsetWidth; rsh = ta.offsetHeight;
     document.addEventListener('mousemove', onResizeMove);
     document.addEventListener('mouseup', onResizeUp);
   });
 
-  // Also clean up listeners when note is explicitly deleted
   del.addEventListener('click', () => {
     if (activeFT && activeFT.noteObj === noteObj) setActiveFT(null);
+    const i = S.ftNotes.indexOf(noteObj);
+    if (i !== -1) S.ftNotes.splice(i, 1);
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     document.removeEventListener('mousemove', onResizeMove);
     document.removeEventListener('mouseup', onResizeUp);
+    save(); wrap.remove();
   });
 
   wrap.appendChild(del); wrap.appendChild(rz); wrap.appendChild(ta); canvas.appendChild(wrap);
   setTimeout(() => {
-    if (noteObj.h > 0) {
-      ta.style.height = noteObj.h + 'px';
-      ta.style.overflowY = 'auto';
-    } else {
-      ta.style.height = 'auto';
-      ta.style.height = ta.scrollHeight + 'px';
-    }
+    if (noteObj.h > 0) { ta.style.height = noteObj.h + 'px'; ta.style.overflowY = 'auto'; }
+    else { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
   }, 0);
 }
 
@@ -1669,37 +1738,35 @@ function exportSettings() {
   const blob = new Blob([data], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = `startpage-settings-${new Date().toISOString().split('T')[0]}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  a.href = url; a.download = `startpage-settings-${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   showNotification('Settings exported', { body: 'Your startpage settings have been saved.' });
 }
 
 function importSettings(file) {
-  if (!file || file.size > 5 * 1024 * 1024) {
-    showNotification('Import failed', { body: 'File is missing or too large.' });
-    return;
-  }
-
+  if (!file || file.size > 5 * 1024 * 1024) { showNotification('Import failed', { body: 'File is missing or too large.' }); return; }
   const reader = new FileReader();
   reader.onload = ev => {
     try {
       const imported = JSON.parse(ev.target.result);
-      if (!imported || typeof imported !== 'object' || Array.isArray(imported)) {
-        throw new Error('Invalid root object');
-      }
-      dMerge(S, imported);
-      if (!Array.isArray(S.widgets)) S.widgets = [];
-      if (!Array.isArray(S.ftNotes)) S.ftNotes = [];
+      if (!imported || typeof imported !== 'object' || Array.isArray(imported)) throw new Error('Invalid root object');
+      const sanitized = sanitizeLoadedState(imported);
+      if (!sanitized) throw new Error('Invalid structure');
+      dMerge(S, sanitized);
+      if (!Array.isArray(S.widgets))   S.widgets = [];
+      if (!Array.isArray(S.ftNotes))   S.ftNotes = [];
       if (!Array.isArray(S.bookmarks)) S.bookmarks = [];
-      save();
-
-      // Reload page to apply all settings
-      showNotification('Settings imported', { body: 'Reloading with new settings...' });
-      setTimeout(() => location.reload(), 500);
+      // Write to both IDB and LS so either path gets fresh data on next boot
+      const compressed = compressStateForStorage(S);
+      const doReload = () => {
+        showNotification('Settings imported', { body: 'Reloading with new settings...' });
+        setTimeout(() => location.reload(), 500);
+      };
+      if (_dbReady && !_dbFailed) {
+        idbPut(compressed).then(doReload).catch(() => { lsFallbackSave(compressed); doReload(); });
+      } else {
+        lsFallbackSave(compressed); doReload();
+      }
     } catch (e) {
       showNotification('Import failed', { body: 'Invalid file or corrupted data.' });
       console.error('Import error:', e);
@@ -1711,15 +1778,22 @@ function importSettings(file) {
 document.getElementById('export-btn').addEventListener('click', exportSettings);
 document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file').click());
 document.getElementById('import-file').addEventListener('change', e => {
-  if (e.target.files[0]) {
-    importSettings(e.target.files[0]);
-    e.target.value = '';
-  }
+  if (e.target.files[0]) { importSettings(e.target.files[0]); e.target.value = ''; }
 });
 
 // ══════════════════════════════
-//  RESTORE SAVED WIDGETS
+//  BOOT
 // ══════════════════════════════
-S.widgets.forEach(cfg => makeWidget(cfg));
+// applyTheme / applyBlurMode / applyMode / applyBg are called synchronously
+// above for initial paint with DEF values. bootApp() then loads persisted
+// state async and re-applies + renders widgets once IDB resolves.
+applyTheme(S.theme);
+applyBlurMode(S.blurMode || 'auto');
+applyMode();
+applyBg();
 
-
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootApp, { once: true });
+} else {
+  bootApp();
+}

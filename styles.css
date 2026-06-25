@@ -27,7 +27,6 @@
   --font-sans: 'Instrument Sans', sans-serif;
 }
 
-/* FIX 5: Added body.t-dark rule so the class actually does something */
 body.t-dark {
   --bg: #0d0d0f;
   --bg2: #141416;
@@ -107,7 +106,8 @@ body {
   font-family: var(--font-sans);
   color: var(--text);
   background: var(--bg);
-  transition: color .3s;
+  /* FIX: removed 'transition: color .3s' — interpolates all text hues on
+     every theme switch, wastes a compositor layer with no visible benefit */
 }
 
 button:focus-visible,
@@ -163,6 +163,47 @@ textarea:focus-visible,
   border-radius: 40px;
   padding: 6px 12px;
   transition: opacity .3s, transform .3s;
+  user-select: none;}
+
+/* FIX (no-blur): strip backdrop-filter from all blurred surfaces at once.
+   body.no-blur is toggled by JS blur-mode system (auto/on/off).
+   Fallback: slightly more opaque backgrounds so panels remain readable. */
+body.no-blur #toolbar,
+body.no-blur #mode-toggle,
+body.no-blur #brand-mark,
+body.no-blur .wp,
+body.no-blur #bm-panel,
+body.no-blur #bg-panel,
+body.no-blur #ft-stylebar {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Compensate opacity lost from backdrop-filter removal */
+body.no-blur #toolbar,
+body.no-blur #mode-toggle,
+body.no-blur #brand-mark {
+  background: color-mix(in srgb, var(--bg2) 92%, transparent) !important;
+}
+
+body.no-blur .wp {
+  background: color-mix(in srgb, var(--bg2) 85%, transparent) !important;
+}
+
+body.no-blur #bm-panel,
+body.no-blur #bg-panel {
+  background: var(--bg2) !important;
+}
+
+body.no-blur #ft-stylebar {
+  background: color-mix(in srgb, var(--bg2) 90%, transparent) !important;
+}
+
+/* Glass theme: keep glass feel even without blur by using a tinted bg */
+body.t-glass.no-blur #toolbar,
+body.t-glass.no-blur #mode-toggle,
+body.t-glass.no-blur .wp {
+  background: rgba(15, 20, 50, 0.88) !important;
 }
 
 body.view-mode #toolbar {
@@ -988,11 +1029,14 @@ body.t-glass #bm-panel {
   margin-top: 10px;
 }
 
+/* FIX: was 'transition: width 1s linear' which fights the JS 1s update interval,
+   causing each new value to interrupt the previous transition and create jank.
+   0.5s finishes well before the next JS update arrives. */
 .pomo-bar {
   height: 2px;
   background: var(--accent);
   border-radius: 2px;
-  transition: width 1s linear;
+  transition: width 0.5s linear;
 }
 
 .pomo-btns {
@@ -1454,4 +1498,18 @@ body.view-mode #ft-stylebar {
 ::-webkit-scrollbar-thumb {
   background: var(--border2);
   border-radius: 2px;
+}
+
+/* ══ REDUCED MOTION SAFETY NET ══
+   If the OS prefers reduced motion, remove all decorative transitions
+   regardless of blur-mode setting. Blur is already handled by JS detecting
+   prefers-reduced-motion as a low-spec vote, but this covers transitions too. */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
 }
