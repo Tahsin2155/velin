@@ -96,11 +96,7 @@ function idbGet() {
     if (!_db) { reject('no db'); return; }
     const tx = _db.transaction([DB_STORE], 'readonly');
     const req = tx.objectStore(DB_STORE).get('main');
-<<<<<<< HEAD
-    req.onsuccess = () => resolve(req.result ? req.result.data : null);
-=======
     req.onsuccess = () => resolve(req.result ? { data: req.result.data, savedAt: req.result.savedAt || 0 } : null);
->>>>>>> e972411 (notes widget now renders tables(md))
     req.onerror = () => reject(req.error);
   });
 }
@@ -112,16 +108,6 @@ function idbGet() {
 const IMG_SIZE_WARN_BYTES = 500 * 1024; // 500 KB
 
 function compressStateForStorage(state) {
-<<<<<<< HEAD
-  const copy = JSON.parse(JSON.stringify(state));
-  if (copy.bg && copy.bg.type === 'image' && copy.bg.imgData) {
-    if (copy.bg.imgData.length > IMG_SIZE_WARN_BYTES) {
-      console.warn('Background image too large for storage, stripping');
-      copy.bg = { type: 'solid', value: '#0d0d0f' };
-    }
-  }
-  return copy;
-=======
   const bgIsOversizedImage =
     state.bg && state.bg.type === 'image' && state.bg.imgData &&
     state.bg.imgData.length > IMG_SIZE_WARN_BYTES;
@@ -137,7 +123,6 @@ function compressStateForStorage(state) {
   }
 
   return JSON.parse(JSON.stringify(state));
->>>>>>> e972411 (notes widget now renders tables(md))
 }
 
 // ══════════════════════════════
@@ -146,12 +131,6 @@ function compressStateForStorage(state) {
 function estimateLsUsagePercent() {
   try {
     let used = 0;
-<<<<<<< HEAD
-    for (const k in localStorage) {
-      if (Object.prototype.hasOwnProperty.call(localStorage, k)) {
-        try { used += (localStorage.getItem(k) || '').length * 2; } catch (e) {} // UTF-16 ~2 bytes/char
-      }
-=======
     // Scope to this app's own keys only — avoid counting unrelated origin data
     // and avoid iterating the whole localStorage object on every save.
     const OWN_KEY_PREFIXES = [LS_FALLBACK_KEY, STORAGE_KEY, FAV_CACHE_STORAGE_KEY, 'sp3_pomo_lock_'];
@@ -159,7 +138,6 @@ function estimateLsUsagePercent() {
       if (!Object.prototype.hasOwnProperty.call(localStorage, k)) continue;
       if (!OWN_KEY_PREFIXES.some(prefix => k.startsWith(prefix))) continue;
       try { used += (localStorage.getItem(k) || '').length * 2; } catch (e) {} // UTF-16 ~2 bytes/char
->>>>>>> e972411 (notes widget now renders tables(md))
     }
     return Math.min(100, Math.round((used / (5 * 1024 * 1024)) * 100));
   } catch (e) { return 0; }
@@ -193,20 +171,13 @@ function persistNow() {
 function lsFallbackSave(compressed) {
   try {
     localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(compressed));
-<<<<<<< HEAD
-=======
     localStorage.setItem(LS_FALLBACK_KEY + '_ts', String(Date.now()));
->>>>>>> e972411 (notes widget now renders tables(md))
     warnIfLsNearFull();
   } catch (e) {
     // Last resort: strip image and retry
     if (compressed.bg && compressed.bg.type === 'image') {
       compressed.bg = { type: 'solid', value: '#0d0d0f' };
-<<<<<<< HEAD
-      try { localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(compressed)); showImgWarn(); }
-=======
       try { localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(compressed)); localStorage.setItem(LS_FALLBACK_KEY + '_ts', String(Date.now())); showImgWarn(); }
->>>>>>> e972411 (notes widget now renders tables(md))
       catch (e2) { showNotification('Storage full', { body: 'Delete some widgets to free space.' }); }
     } else {
       showNotification('Storage full', { body: 'Delete some widgets to free space.' });
@@ -235,10 +206,7 @@ window.addEventListener('beforeunload', () => {
   try {
     const compressed = compressStateForStorage(S);
     localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(compressed));
-<<<<<<< HEAD
-=======
     localStorage.setItem(LS_FALLBACK_KEY + '_ts', String(Date.now()));
->>>>>>> e972411 (notes widget now renders tables(md))
   } catch (e) {}
 });
 
@@ -261,12 +229,6 @@ function sanitizeLoadedState(parsed) {
 function loadFromLsFallback() {
   try {
     // Try new key first, then legacy key for migration
-<<<<<<< HEAD
-    const raw = localStorage.getItem(LS_FALLBACK_KEY) || localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return sanitizeLoadedState(parsed);
-=======
     const rawKey = localStorage.getItem(LS_FALLBACK_KEY) ? LS_FALLBACK_KEY : (localStorage.getItem(STORAGE_KEY) ? STORAGE_KEY : null);
     const raw = rawKey ? localStorage.getItem(rawKey) : null;
     if (!raw) return null;
@@ -275,15 +237,11 @@ function loadFromLsFallback() {
     if (!sanitized) return null;
     const tsRaw = rawKey === LS_FALLBACK_KEY ? localStorage.getItem(LS_FALLBACK_KEY + '_ts') : null;
     return { data: sanitized, savedAt: tsRaw ? Number(tsRaw) || 0 : 0 };
->>>>>>> e972411 (notes widget now renders tables(md))
   } catch (e) {
     console.warn('LS load failed, clearing corrupt data:', e);
     localStorage.removeItem(LS_FALLBACK_KEY);
     localStorage.removeItem(STORAGE_KEY);
-<<<<<<< HEAD
-=======
     localStorage.removeItem(LS_FALLBACK_KEY + '_ts');
->>>>>>> e972411 (notes widget now renders tables(md))
     return null;
   }
 }
@@ -293,10 +251,7 @@ function loadFromLsFallback() {
 // ══════════════════════════════
 let _appBooted = false;
 
-<<<<<<< HEAD
-=======
 // Hydrate persisted state, migrate if needed, and render the app once storage is ready.
->>>>>>> e972411 (notes widget now renders tables(md))
 async function bootApp() {
   if (_appBooted) return;
   _appBooted = true;
@@ -305,22 +260,6 @@ async function bootApp() {
 
   try {
     await openDB();
-<<<<<<< HEAD
-    loaded = await idbGet();
-    if (loaded) {
-      loaded = sanitizeLoadedState(loaded);
-      // Migrate old localStorage data into IDB on first run
-      const lsData = loadFromLsFallback();
-      if (lsData && (!loaded || (lsData.widgets || []).length > (loaded.widgets || []).length)) {
-        console.log('Migrating localStorage → IndexedDB');
-        loaded = lsData;
-        await idbPut(compressStateForStorage(lsData)).catch(() => {});
-      }
-    } else {
-      // IDB empty — load from localStorage (first visit or migration)
-      loaded = loadFromLsFallback();
-      if (loaded) {
-=======
     const idbResult = await idbGet();
     const lsResult = loadFromLsFallback();
     if (idbResult) {
@@ -334,7 +273,6 @@ async function bootApp() {
       // IDB empty — load from localStorage (first visit or migration)
       if (lsResult) {
         loaded = lsResult.data;
->>>>>>> e972411 (notes widget now renders tables(md))
         console.log('First IDB boot: migrating from localStorage');
         await idbPut(compressStateForStorage(loaded)).catch(() => {});
       }
@@ -342,12 +280,8 @@ async function bootApp() {
   } catch (e) {
     console.warn('IDB unavailable, using localStorage:', e);
     _dbFailed = true;
-<<<<<<< HEAD
-    loaded = loadFromLsFallback();
-=======
     const lsResult = loadFromLsFallback();
     loaded = lsResult ? lsResult.data : null;
->>>>>>> e972411 (notes widget now renders tables(md))
   }
 
   if (loaded) dMerge(S, loaded);
@@ -380,31 +314,22 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 function normalizeHttpUrl(url) {
   const trimmed = (url || '').trim();
   if (!trimmed) return '';
-<<<<<<< HEAD
-=======
   // Keep bookmark targets on http(s) only; reject explicit non-web schemes.
   if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !/^https?:\/\//i.test(trimmed)) {
     return '';
   }
->>>>>>> e972411 (notes widget now renders tables(md))
   return /^https?:\/\//i.test(trimmed) ? trimmed : 'https://' + trimmed;
 }
 
 function getHostname(url) {
-<<<<<<< HEAD
-=======
   // Used for favicon lookup and a readable fallback label.
->>>>>>> e972411 (notes widget now renders tables(md))
   try { return new URL(normalizeHttpUrl(url)).hostname; }
   catch (e) { return (url || '').trim(); }
 }
 
 // Markdown renderer
 function renderMD(md) {
-<<<<<<< HEAD
-=======
   // Convert a tiny markdown subset to sanitized HTML for note previews.
->>>>>>> e972411 (notes widget now renders tables(md))
   function sanitizeHref(href) {
     try {
       const url = new URL(href, location.href);
@@ -423,9 +348,6 @@ function renderMD(md) {
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`(.+?)`/g, '<code>$1</code>')
     .replace(/\[(.+?)\]\((.+?)\)/g, (_, text, href) => `<a href="${sanitizeHref(href)}">${text}</a>`);
-<<<<<<< HEAD
-  const lines = out.split('\n');
-=======
 
   // ── TABLES ──
   // Parse simple GFM pipe tables as one block before the paragraph fallback.
@@ -480,7 +402,6 @@ function renderMD(md) {
       i++;
     }
   }
->>>>>>> e972411 (notes widget now renders tables(md))
   const result = [];
   let inList = false;
   for (const line of lines) {
@@ -490,11 +411,7 @@ function renderMD(md) {
       result.push('<li>' + liMatch[1] + '</li>');
     } else {
       if (inList) { result.push('</ul>'); inList = false; }
-<<<<<<< HEAD
-      if (line && !/^<[hup\/]|^<hr|^<ul|^<li/.test(line)) {
-=======
       if (line && !/^<[hup\/]|^<hr|^<ul|^<li|^<table/.test(line)) {
->>>>>>> e972411 (notes widget now renders tables(md))
         result.push('<p>' + line + '</p>');
       } else {
         result.push(line);
@@ -848,12 +765,8 @@ function makeWidget(cfg) {
   if (cfg.rot) el.style.transform = `rotate(${cfg.rot}deg)`;
 
   const hdr = document.createElement('div'); hdr.className = 'wp-header';
-<<<<<<< HEAD
-  hdr.innerHTML = `<span class="wp-title">${cfg.type}</span><div class="wp-actions"><button class="wp-btn wp-close" title="close">✕</button></div>`;
-=======
   hdr.innerHTML = `<span class="wp-title"></span><div class="wp-actions"><button class="wp-btn wp-close" title="close">✕</button></div>`;
   hdr.querySelector('.wp-title').textContent = cfg.type || '';
->>>>>>> e972411 (notes widget now renders tables(md))
   el.appendChild(hdr);
 
   const body = document.createElement('div'); body.className = 'wp-body'; el.appendChild(body);
@@ -962,20 +875,14 @@ function makeResizable(el, handle, id) {
   });
 }
 
-<<<<<<< HEAD
-=======
 // Rebuild the persisted widget array from live widget refs and debounce a save.
->>>>>>> e972411 (notes widget now renders tables(md))
 function saveWidgets() { S.widgets = Object.values(wRefs).map(r => r.cfg); save(); }
 
 // ══════════════════════════════
 //  WIDGET BODIES
 // ══════════════════════════════
 function buildWidgetBody(type, body, cfg, id) {
-<<<<<<< HEAD
-=======
   // Single dispatch point for all widget types.
->>>>>>> e972411 (notes widget now renders tables(md))
   if (type === 'clock') buildClock(body, cfg, id);
   else if (type === 'bookmark') buildBookmarkWidget(body, cfg, id);
   else if (type === 'todo') buildTodo(body, cfg, id);
@@ -1003,11 +910,8 @@ function updateClockSize(id) {
 }
 
 function buildClock(body, cfg, id) {
-<<<<<<< HEAD
-=======
   // Clock keeps a second-level timer and switches between digital and analog
   // modes without repainting hidden or off-screen canvases.
->>>>>>> e972411 (notes widget now renders tables(md))
   body.style.alignItems = 'center';
   body.style.justifyContent = 'center';
   body.style.padding = '16px 14px';
@@ -1128,10 +1032,7 @@ function buildClock(body, cfg, id) {
 
 // ── BOOKMARK WIDGET ──
 function buildBookmarkWidget(body, cfg, id) {
-<<<<<<< HEAD
-=======
   // Bookmark widgets are a normalized URL, favicon, and label.
->>>>>>> e972411 (notes widget now renders tables(md))
   body.style.padding = '0';
   const el = document.getElementById('wp-' + id);
   if (el) { el.style.background = 'var(--surface2)'; el.style.minWidth = '80px'; el.style.minHeight = '80px'; }
@@ -1157,10 +1058,7 @@ function buildBookmarkWidget(body, cfg, id) {
 
 // ── TODO ──
 function buildTodo(body, cfg, id) {
-<<<<<<< HEAD
-=======
   // Todo widgets keep task state in cfg.todos and rerender after each change.
->>>>>>> e972411 (notes widget now renders tables(md))
   if (!cfg.todos) cfg.todos = [];
   const list = document.createElement('div'); list.className = 'todo-list-wrap';
 
@@ -1202,10 +1100,7 @@ function buildTodo(body, cfg, id) {
 
 // ── NOTE ──
 function buildNote(body, cfg, id) {
-<<<<<<< HEAD
-=======
   // Notes combine a small editor with a preview mode and quick formatting.
->>>>>>> e972411 (notes widget now renders tables(md))
   if (!cfg.noteContent) cfg.noteContent = '';
   let editMode = true;
 
@@ -1283,10 +1178,7 @@ function buildNote(body, cfg, id) {
 
 // ── POMODORO ──
 function buildPomodoro(body, cfg, id) {
-<<<<<<< HEAD
-=======
   // Pomodoro state is versioned so multiple tabs can converge safely.
->>>>>>> e972411 (notes widget now renders tables(md))
   const MODES = { focus: 25 * 60, shortBreak: 5 * 60, longBreak: 15 * 60 };
   const STATE_VERSION = 1;
   const STORAGE_SYNC_INTERVAL_MS = 10000;
@@ -1592,10 +1484,7 @@ function buildPomodoro(body, cfg, id) {
 //  WIDGET CLOSE — with cleanup
 // ══════════════════════════════
 function closeWidget(id) {
-<<<<<<< HEAD
-=======
   // Run widget cleanup before removing DOM nodes and state references.
->>>>>>> e972411 (notes widget now renders tables(md))
   const ref = wRefs[id]; if (!ref) return;
   if (Array.isArray(ref._cleanups)) ref._cleanups.forEach(fn => { try { fn(); } catch (e) { } });
   ref.el.remove();
@@ -1629,11 +1518,8 @@ if (!S.bookmarks) S.bookmarks = [];
 const bmPanel = document.getElementById('bm-panel');
 
 function renderBmSaved() {
-<<<<<<< HEAD
-=======
   // Rebuild the bookmark panel from S.bookmarks and wire each item to spawn
   // a widget instance on click.
->>>>>>> e972411 (notes widget now renders tables(md))
   const list = document.getElementById('bm-saved-list'); list.innerHTML = '';
   S.bookmarks.forEach((bm) => {
     const item = document.createElement('div'); item.className = 'bm-saved-item';
@@ -1677,10 +1563,7 @@ document.getElementById('bm-add-btn').addEventListener('click', () => {
   const name = document.getElementById('bm-name-inp').value.trim();
   if (!url) return;
   url = normalizeHttpUrl(url);
-<<<<<<< HEAD
-=======
   if (!url) { showNotification('Invalid URL', { body: 'Only http and https URLs are allowed.' }); return; }
->>>>>>> e972411 (notes widget now renders tables(md))
   S.bookmarks.push({ name: name || url, url }); save(); renderBmSaved();
   document.getElementById('bm-name-inp').value = ''; document.getElementById('bm-url-inp').value = '';
 });
@@ -1810,11 +1693,8 @@ ftDeleteBtn.addEventListener('click', () => {
 window.addEventListener('resize', positionFtStylebar);
 
 function makeFTNote(noteObj) {
-<<<<<<< HEAD
-=======
   // Free-text notes are independent absolutely positioned editors with drag,
   // resize, rotation, and formatting state stored alongside the text.
->>>>>>> e972411 (notes widget now renders tables(md))
   if (typeof noteObj.w !== 'number') noteObj.w = 140;
   if (typeof noteObj.h !== 'number') noteObj.h = 0;
   if (typeof noteObj.size !== 'number') noteObj.size = 14;
@@ -1912,10 +1792,7 @@ function makeFTNote(noteObj) {
 }
 
 function renderFT() {
-<<<<<<< HEAD
-=======
   // Rebuild all free-text notes from the persisted array.
->>>>>>> e972411 (notes widget now renders tables(md))
   setActiveFT(null);
   document.querySelectorAll('.ft-wrapper').forEach(e => e.remove());
   S.ftNotes.forEach(n => makeFTNote(n));
@@ -1950,10 +1827,7 @@ document.addEventListener('keydown', e => {
 //  EXPORT / IMPORT
 // ══════════════════════════════
 function exportSettings() {
-<<<<<<< HEAD
-=======
   // Export the full in-memory state as a portable JSON snapshot.
->>>>>>> e972411 (notes widget now renders tables(md))
   const data = JSON.stringify(S, null, 2);
   const blob = new Blob([data], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -1964,10 +1838,7 @@ function exportSettings() {
 }
 
 function importSettings(file) {
-<<<<<<< HEAD
-=======
   // Validate, sanitize, merge, and persist imported settings before reload.
->>>>>>> e972411 (notes widget now renders tables(md))
   if (!file || file.size > 5 * 1024 * 1024) { showNotification('Import failed', { body: 'File is missing or too large.' }); return; }
   const reader = new FileReader();
   reader.onload = ev => {

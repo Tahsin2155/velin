@@ -21,10 +21,7 @@
   --accent2: rgba(200, 169, 110, 0.15);
   --red: #e05c5c;
   --green: #5cba82;
-<<<<<<< HEAD
-=======
   --table-line: rgba(255, 255, 255, 0.22);
->>>>>>> e972411 (notes widget now renders tables(md))
   --radius: 14px;
   --font-display: 'DM Serif Display', serif;
   --font-mono: 'DM Mono', monospace;
@@ -46,10 +43,7 @@ body.t-dark {
   --accent2: rgba(200, 169, 110, 0.15);
   --red: #e05c5c;
   --green: #5cba82;
-<<<<<<< HEAD
-=======
   --table-line: rgba(255, 255, 255, 0.22);
->>>>>>> e972411 (notes widget now renders tables(md))
 }
 
 body.t-light {
@@ -67,10 +61,7 @@ body.t-light {
   --accent2: rgba(138, 100, 48, 0.12);
   --red: #c0392b;
   --green: #27704a;
-<<<<<<< HEAD
-=======
   --table-line: rgba(0, 0, 0, 0.22);
->>>>>>> e972411 (notes widget now renders tables(md))
 }
 
 body.t-glass {
@@ -88,10 +79,7 @@ body.t-glass {
   --accent2: rgba(167, 139, 250, 0.15);
   --red: #f87171;
   --green: #6ee7b7;
-<<<<<<< HEAD
-=======
   --table-line: rgba(255, 255, 255, 0.22);
->>>>>>> e972411 (notes widget now renders tables(md))
 }
 
 body.t-bw {
@@ -109,10 +97,7 @@ body.t-bw {
   --accent2: rgba(0, 0, 0, 0.08);
   --red: #000;
   --green: #000;
-<<<<<<< HEAD
-=======
   --table-line: rgba(0, 0, 0, 0.22);
->>>>>>> e972411 (notes widget now renders tables(md))
 }
 
 html,
@@ -1023,8 +1008,6 @@ body.t-glass #bm-panel {
   margin: 10px 0;
 }
 
-<<<<<<< HEAD
-=======
 .note-preview-area table {
   border-collapse: separate;
   border-spacing: 3px;
@@ -1064,7 +1047,6 @@ body.t-glass #bm-panel {
   background: var(--surface);
 }
 
->>>>>>> e972411 (notes widget now renders tables(md))
 /* ══ POMODORO ══ */
 .pomo-time {
   font-family: var(--font-mono);
