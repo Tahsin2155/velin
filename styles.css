@@ -21,6 +21,10 @@
   --accent2: rgba(200, 169, 110, 0.15);
   --red: #e05c5c;
   --green: #5cba82;
+<<<<<<< HEAD
+=======
+  --table-line: rgba(255, 255, 255, 0.22);
+>>>>>>> e972411 (notes widget now renders tables(md))
   --radius: 14px;
   --font-display: 'DM Serif Display', serif;
   --font-mono: 'DM Mono', monospace;
@@ -42,6 +46,10 @@ body.t-dark {
   --accent2: rgba(200, 169, 110, 0.15);
   --red: #e05c5c;
   --green: #5cba82;
+<<<<<<< HEAD
+=======
+  --table-line: rgba(255, 255, 255, 0.22);
+>>>>>>> e972411 (notes widget now renders tables(md))
 }
 
 body.t-light {
@@ -59,6 +67,10 @@ body.t-light {
   --accent2: rgba(138, 100, 48, 0.12);
   --red: #c0392b;
   --green: #27704a;
+<<<<<<< HEAD
+=======
+  --table-line: rgba(0, 0, 0, 0.22);
+>>>>>>> e972411 (notes widget now renders tables(md))
 }
 
 body.t-glass {
@@ -76,6 +88,10 @@ body.t-glass {
   --accent2: rgba(167, 139, 250, 0.15);
   --red: #f87171;
   --green: #6ee7b7;
+<<<<<<< HEAD
+=======
+  --table-line: rgba(255, 255, 255, 0.22);
+>>>>>>> e972411 (notes widget now renders tables(md))
 }
 
 body.t-bw {
@@ -93,6 +109,10 @@ body.t-bw {
   --accent2: rgba(0, 0, 0, 0.08);
   --red: #000;
   --green: #000;
+<<<<<<< HEAD
+=======
+  --table-line: rgba(0, 0, 0, 0.22);
+>>>>>>> e972411 (notes widget now renders tables(md))
 }
 
 html,
@@ -1003,6 +1023,48 @@ body.t-glass #bm-panel {
   margin: 10px 0;
 }
 
+<<<<<<< HEAD
+=======
+.note-preview-area table {
+  border-collapse: separate;
+  border-spacing: 3px;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 12px;
+  border: 1px solid var(--table-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.note-preview-area th,
+.note-preview-area td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--table-line);
+  border-right: 1px solid var(--table-line);
+}
+
+.note-preview-area th:last-child,
+.note-preview-area td:last-child {
+  border-right: none;
+}
+
+.note-preview-area tr:last-child td {
+  border-bottom: none;
+}
+
+.note-preview-area th {
+  background: var(--surface2);
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 1px solid var(--accent);
+}
+
+.note-preview-area tbody tr:nth-child(even) {
+  background: var(--surface);
+}
+
+>>>>>>> e972411 (notes widget now renders tables(md))
 /* ══ POMODORO ══ */
 .pomo-time {
   font-family: var(--font-mono);
