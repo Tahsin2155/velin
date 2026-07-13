@@ -50,253 +50,108 @@ function showNotification(title, options = {}) {
 requestNotificationPermission();
 
 let S = JSON.parse(JSON.stringify(DEF));
-const STORAGE_KEY = 'sp3';
-const LS_FALLBACK_KEY = 'sp3_ls_fallback'; // localStorage fallback key
-const SAVE_DEBOUNCE_MS = 120;
-let _saveTimer = null;
 
 // ══════════════════════════════
-//  INDEXEDDB  (primary storage)
-//  Falls back to localStorage on any IDB failure
+//  STORAGE  (VelinStore — see storage.js)
+//  S stays as the in-memory working copy widgets/UI code reads and mutates
+//  directly, same as before. save()/saveWidgets() now write only the
+//  specific record(s) that changed into normalized IndexedDB stores,
+//  instead of re-serializing the entire app state on every call.
 // ══════════════════════════════
-const DB_NAME    = 'velin_db';
-const DB_VERSION = 1;
-const DB_STORE   = 'state';
-let _db = null;
-let _dbReady = false;
-let _dbFailed = false;
 
-function openDB() {
-  return new Promise((resolve, reject) => {
-    if (_db) { resolve(_db); return; }
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onerror = () => { _dbFailed = true; reject(req.error); };
-    req.onsuccess = () => { _db = req.result; _dbReady = true; resolve(_db); };
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(DB_STORE)) {
-        db.createObjectStore(DB_STORE, { keyPath: 'id' });
-      }
-    };
-  });
-}
-
-function idbPut(data) {
-  return new Promise((resolve, reject) => {
-    if (!_db) { reject('no db'); return; }
-    const tx = _db.transaction([DB_STORE], 'readwrite');
-    const req = tx.objectStore(DB_STORE).put({ id: 'main', data, savedAt: Date.now() });
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function idbGet() {
-  return new Promise((resolve, reject) => {
-    if (!_db) { reject('no db'); return; }
-    const tx = _db.transaction([DB_STORE], 'readonly');
-    const req = tx.objectStore(DB_STORE).get('main');
-    req.onsuccess = () => resolve(req.result ? { data: req.result.data, savedAt: req.result.savedAt || 0 } : null);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-// ══════════════════════════════
-//  COMPRESS STATE BEFORE SAVE
-//  Strips oversized image data to prevent quota kills
-// ══════════════════════════════
-const IMG_SIZE_WARN_BYTES = 500 * 1024; // 500 KB
-
-function compressStateForStorage(state) {
-  const bgIsOversizedImage =
-    state.bg && state.bg.type === 'image' && state.bg.imgData &&
-    state.bg.imgData.length > IMG_SIZE_WARN_BYTES;
-
-  if (bgIsOversizedImage) {
-    console.warn('Background image too large for storage, stripping');
-    // Clone everything except bg, then attach the replacement — avoids
-    // stringifying the oversized imgData string just to throw it away.
-    const { bg, ...rest } = state;
-    const copy = JSON.parse(JSON.stringify(rest));
-    copy.bg = { type: 'solid', value: '#0d0d0f' };
-    return copy;
-  }
-
-  return JSON.parse(JSON.stringify(state));
-}
-
-// ══════════════════════════════
-//  QUOTA MONITOR  (localStorage fallback only)
-// ══════════════════════════════
-function estimateLsUsagePercent() {
-  try {
-    let used = 0;
-    // Scope to this app's own keys only — avoid counting unrelated origin data
-    // and avoid iterating the whole localStorage object on every save.
-    const OWN_KEY_PREFIXES = [LS_FALLBACK_KEY, STORAGE_KEY, FAV_CACHE_STORAGE_KEY, 'sp3_pomo_lock_'];
-    for (const k in localStorage) {
-      if (!Object.prototype.hasOwnProperty.call(localStorage, k)) continue;
-      if (!OWN_KEY_PREFIXES.some(prefix => k.startsWith(prefix))) continue;
-      try { used += (localStorage.getItem(k) || '').length * 2; } catch (e) {} // UTF-16 ~2 bytes/char
-    }
-    return Math.min(100, Math.round((used / (5 * 1024 * 1024)) * 100));
-  } catch (e) { return 0; }
-}
-
-function warnIfLsNearFull() {
-  const pct = estimateLsUsagePercent();
-  if (pct >= 90) {
-    console.warn(`localStorage ~${pct}% full — export your settings!`);
-    showNotification('Storage almost full', { body: `~${pct}% used. Export settings to avoid data loss.` });
-  }
-}
-
-// ══════════════════════════════
-//  PERSIST  (IDB primary, LS fallback)
-// ══════════════════════════════
-function persistNow() {
-  const compressed = compressStateForStorage(S);
-
-  if (_dbReady && !_dbFailed) {
-    idbPut(compressed).catch(e => {
-      console.error('IDB save failed, falling back to localStorage:', e);
-      _dbFailed = true;
-      lsFallbackSave(compressed);
-    });
-  } else {
-    lsFallbackSave(compressed);
-  }
-}
-
-function lsFallbackSave(compressed) {
-  try {
-    localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(compressed));
-    localStorage.setItem(LS_FALLBACK_KEY + '_ts', String(Date.now()));
-    warnIfLsNearFull();
-  } catch (e) {
-    // Last resort: strip image and retry
-    if (compressed.bg && compressed.bg.type === 'image') {
-      compressed.bg = { type: 'solid', value: '#0d0d0f' };
-      try { localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(compressed)); localStorage.setItem(LS_FALLBACK_KEY + '_ts', String(Date.now())); showImgWarn(); }
-      catch (e2) { showNotification('Storage full', { body: 'Delete some widgets to free space.' }); }
-    } else {
-      showNotification('Storage full', { body: 'Delete some widgets to free space.' });
-    }
-  }
-}
-
-// ══════════════════════════════
-//  SAVE  (debounced public API)
-// ══════════════════════════════
+// Generic "something changed, persist relevant meta" — covers theme,
+// blurMode, viewMode, bg (the non-widget/bookmark/ftNote state on S).
 function save(flush = false) {
-  if (flush) {
-    if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
-    persistNow();
-    return;
-  }
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => { _saveTimer = null; persistNow(); }, SAVE_DEBOUNCE_MS);
+  VelinStore.setMeta('theme', S.theme, flush);
+  VelinStore.setMeta('blurMode', S.blurMode, flush);
+  VelinStore.setMeta('viewMode', S.viewMode, flush);
+  VelinStore.setMeta('bg', S.bg, flush);
 }
 
 function saveNow() { save(true); }
 
-window.addEventListener('beforeunload', () => {
-  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
-  // Sync flush on unload — IDB async won't complete in time so always LS too
-  try {
-    const compressed = compressStateForStorage(S);
-    localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(compressed));
-    localStorage.setItem(LS_FALLBACK_KEY + '_ts', String(Date.now()));
-  } catch (e) {}
-});
-
 // ══════════════════════════════
-//  SAFE LOAD FROM STORAGE
+//  BACKGROUND IMAGE SIZE GUARD
+//  Generous now that images are stored as Blobs (not base64 in JSON) —
+//  the old 500KB base64 ceiling was a symptom of the old storage design,
+//  not a real IndexedDB limitation.
 // ══════════════════════════════
-function sanitizeLoadedState(parsed) {
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  if (!Array.isArray(parsed.widgets))   parsed.widgets = [];
-  if (!Array.isArray(parsed.ftNotes))   parsed.ftNotes = [];
-  if (!Array.isArray(parsed.bookmarks)) parsed.bookmarks = [];
-  // Sanitize widget count — if >50 keep newest 50 (they're ordered oldest-first)
-  if (parsed.widgets.length > 50) {
-    console.warn(`Clamping widget count from ${parsed.widgets.length} to 50`);
-    parsed.widgets = parsed.widgets.slice(-50);
-  }
-  return parsed;
-}
-
-function loadFromLsFallback() {
-  try {
-    // Try new key first, then legacy key for migration
-    const rawKey = localStorage.getItem(LS_FALLBACK_KEY) ? LS_FALLBACK_KEY : (localStorage.getItem(STORAGE_KEY) ? STORAGE_KEY : null);
-    const raw = rawKey ? localStorage.getItem(rawKey) : null;
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    const sanitized = sanitizeLoadedState(parsed);
-    if (!sanitized) return null;
-    const tsRaw = rawKey === LS_FALLBACK_KEY ? localStorage.getItem(LS_FALLBACK_KEY + '_ts') : null;
-    return { data: sanitized, savedAt: tsRaw ? Number(tsRaw) || 0 : 0 };
-  } catch (e) {
-    console.warn('LS load failed, clearing corrupt data:', e);
-    localStorage.removeItem(LS_FALLBACK_KEY);
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(LS_FALLBACK_KEY + '_ts');
-    return null;
-  }
-}
+const IMG_SIZE_WARN_BYTES = 8 * 1024 * 1024; // 8 MB
 
 // ══════════════════════════════
 //  BOOTSTRAP  (async IDB load → then render)
 // ══════════════════════════════
 let _appBooted = false;
+let _currentBgObjectUrl = null; // object URL for the active bg image Blob; revoked when replaced
 
-// Hydrate persisted state, migrate if needed, and render the app once storage is ready.
+// Hydrate persisted state from normalized stores and render the app once storage is ready.
 async function bootApp() {
   if (_appBooted) return;
   _appBooted = true;
 
-  let loaded = null;
-
   try {
-    await openDB();
-    const idbResult = await idbGet();
-    const lsResult = loadFromLsFallback();
-    if (idbResult) {
-      loaded = sanitizeLoadedState(idbResult.data);
-      if (lsResult && lsResult.savedAt > idbResult.savedAt) {
-        console.log('Migrating localStorage → IndexedDB (LS is newer)');
-        loaded = lsResult.data;
-        await idbPut(compressStateForStorage(loaded)).catch(() => {});
-      }
-    } else {
-      // IDB empty — load from localStorage (first visit or migration)
-      if (lsResult) {
-        loaded = lsResult.data;
-        console.log('First IDB boot: migrating from localStorage');
-        await idbPut(compressStateForStorage(loaded)).catch(() => {});
-      }
+    await VelinStore.openDB();
+    await VelinStore.migrateLegacyIfNeeded();
+    VelinStore.requestPersistence();
+
+    const [meta, widgets, bookmarks, ftNotes] = await Promise.all([
+      VelinStore.getAllMeta(),
+      VelinStore.getAllWidgets(),
+      VelinStore.getAllBookmarks(),
+      VelinStore.getAllFtNotes()
+    ]);
+
+    if (meta.theme) S.theme = meta.theme;
+    if (meta.blurMode) S.blurMode = meta.blurMode;
+    if (typeof meta.viewMode === 'boolean') S.viewMode = meta.viewMode;
+    if (meta.bg) S.bg = meta.bg;
+
+    S.widgets = Array.isArray(widgets) ? widgets : [];
+    if (S.widgets.length > 50) {
+      console.warn(`Clamping widget count from ${S.widgets.length} to 50`);
+      S.widgets = S.widgets.slice(-50);
     }
+    S.bookmarks = Array.isArray(bookmarks) ? bookmarks : [];
+    S.ftNotes = Array.isArray(ftNotes) ? ftNotes : [];
+
+    await loadPersistedFaviconCache();
+
   } catch (e) {
-    console.warn('IDB unavailable, using localStorage:', e);
-    _dbFailed = true;
-    const lsResult = loadFromLsFallback();
-    loaded = lsResult ? lsResult.data : null;
+    console.error('VelinStore boot failed, starting with defaults:', e);
+    S.widgets = []; S.bookmarks = []; S.ftNotes = [];
   }
 
-  if (loaded) dMerge(S, loaded);
-  if (!Array.isArray(S.widgets))   S.widgets = [];
-  if (!Array.isArray(S.ftNotes))   S.ftNotes = [];
-  if (!Array.isArray(S.bookmarks)) S.bookmarks = [];
   viewMode = S.viewMode || false;
-  // Now render everything that depends on loaded state
+
   applyTheme(S.theme);
   applyBlurMode(S.blurMode || 'auto');
   applyMode();
-  applyBg();
+  await applyBg();
   renderBmSaved();
   renderFT();
   S.widgets.forEach(cfg => makeWidget(cfg));
+
+  checkStorageQuota();
+  setInterval(checkStorageQuota, 5 * 60 * 1000); // recheck every 5 min while the tab is open
+}
+
+// ══════════════════════════════
+//  QUOTA MONITORING
+//  Uses the real browser-reported quota (navigator.storage.estimate) rather
+//  than guessing from a fixed localStorage ceiling — IndexedDB quotas are
+//  typically a large share of available disk space, not a hardcoded 5MB.
+// ══════════════════════════════
+let _lastQuotaWarnAt = 0;
+async function checkStorageQuota() {
+  const { percent, supported } = await VelinStore.getQuotaInfo();
+  if (!supported) return;
+  if (percent >= 85) {
+    const now = Date.now();
+    if (now - _lastQuotaWarnAt > 30 * 60 * 1000) { // don't nag more than once per 30 min
+      _lastQuotaWarnAt = now;
+      showNotification('Storage getting full', { body: `~${percent}% of available storage used. Consider exporting your settings or removing large backgrounds.` });
+    }
+  }
 }
 
 function showImgWarn() {
@@ -535,31 +390,52 @@ applyMode();
 
 // ══════════════════════════════
 //  BACKGROUND
+//  Images are stored as Blobs in IndexedDB (via VelinStore), referenced
+//  from S.bg by imageId. Rendering converts the Blob to a short-lived
+//  object URL, which is revoked whenever it's replaced to avoid leaking
+//  memory across background changes.
 // ══════════════════════════════
 const bgLayer = document.getElementById('bg-layer');
 const bgImgLayer = document.getElementById('bg-img-layer');
 let imgBrightness = (S.bg && S.bg.brightness) || 100;
 let imgBlur = (S.bg && S.bg.blur) || 0;
 
-function applyBg() {
+async function applyBg() {
   const bg = S.bg;
   if (!bg) return;
   if (bg.type === 'solid') {
     bgLayer.style.background = bg.value || '#0d0d0f';
     bgImgLayer.style.opacity = 0;
+    releaseCurrentBgObjectUrl();
   } else if (bg.type === 'gradient') {
     bgLayer.style.background = bg.value;
     bgImgLayer.style.opacity = 0;
-  } else if (bg.type === 'image') {
+    releaseCurrentBgObjectUrl();
+  } else if (bg.type === 'image' && bg.imageId) {
     bgLayer.style.background = 'transparent';
     const brightness = bg.brightness || 100;
     const blur = bg.blur || 0;
     bgImgLayer.style.filter = `brightness(${brightness}%) blur(${blur}px)`;
-    bgImgLayer.style.backgroundImage = `url(${bg.imgData})`;
-    bgImgLayer.style.opacity = 1;
+    try {
+      const blob = await VelinStore.getImageBlob(bg.imageId);
+      if (blob) {
+        releaseCurrentBgObjectUrl();
+        _currentBgObjectUrl = URL.createObjectURL(blob);
+        bgImgLayer.style.backgroundImage = `url(${_currentBgObjectUrl})`;
+        bgImgLayer.style.opacity = 1;
+      } else {
+        // Referenced image missing (e.g. cleared elsewhere) — fall back to solid.
+        S.bg = { type: 'solid', value: '#0d0d0f' }; save(); applyBg();
+      }
+    } catch (e) {
+      console.error('Failed to load background image blob:', e);
+    }
   }
 }
-applyBg();
+
+function releaseCurrentBgObjectUrl() {
+  if (_currentBgObjectUrl) { URL.revokeObjectURL(_currentBgObjectUrl); _currentBgObjectUrl = null; }
+}
 
 const bgPanel = document.getElementById('bg-panel');
 document.getElementById('bg-toggle-btn').addEventListener('click', () => bgPanel.classList.toggle('open'));
@@ -571,42 +447,62 @@ document.querySelectorAll('.bg-tab').forEach(t => t.addEventListener('click', ()
   ['solid', 'gradient', 'image'].forEach(n => document.getElementById('bg-' + n + '-panel').classList.toggle('show', n === t.dataset.bgtab));
 }));
 
-document.querySelectorAll('.color-swatch').forEach(sw => sw.addEventListener('click', () => {
+// Switching away from an image background to solid/gradient drops the old
+// blob so storage doesn't accumulate orphaned images.
+async function clearOldBgImageIfAny() {
+  const prev = S.bg;
+  if (prev && prev.type === 'image' && prev.imageId) {
+    await VelinStore.deleteImageBlob(prev.imageId).catch(() => {});
+  }
+}
+
+document.querySelectorAll('.color-swatch').forEach(sw => sw.addEventListener('click', async () => {
   document.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('active'));
   sw.classList.add('active');
-  S.bg = { type: 'solid', value: sw.dataset.color }; save(); applyBg();
+  await clearOldBgImageIfAny();
+  S.bg = { type: 'solid', value: sw.dataset.color }; save(true); applyBg();
 }));
 
-document.getElementById('solid-color-picker').addEventListener('input', e => {
+document.getElementById('solid-color-picker').addEventListener('input', async e => {
   document.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('active'));
-  S.bg = { type: 'solid', value: e.target.value }; save(); applyBg();
+  await clearOldBgImageIfAny();
+  S.bg = { type: 'solid', value: e.target.value }; save(true); applyBg();
 });
 
-document.querySelectorAll('.grad-preset').forEach(gp => gp.addEventListener('click', () => {
+document.querySelectorAll('.grad-preset').forEach(gp => gp.addEventListener('click', async () => {
   document.querySelectorAll('.grad-preset').forEach(x => x.classList.remove('active'));
   gp.classList.add('active');
-  S.bg = { type: 'gradient', value: gp.dataset.grad }; save(); applyBg();
+  await clearOldBgImageIfAny();
+  S.bg = { type: 'gradient', value: gp.dataset.grad }; save(true); applyBg();
 }));
 
-function buildCustomGrad() {
+async function buildCustomGrad() {
   const c1 = document.getElementById('grad-c1').value;
   const c2 = document.getElementById('grad-c2').value;
   const dir = document.getElementById('grad-dir').value;
+  await clearOldBgImageIfAny();
   S.bg = { type: 'gradient', value: `linear-gradient(${dir},${c1},${c2})` };
-  save(); applyBg();
+  save(true); applyBg();
 }
 ['grad-c1', 'grad-c2', 'grad-dir'].forEach(id => document.getElementById(id).addEventListener('input', buildCustomGrad));
 
-document.getElementById('img-upload').addEventListener('change', e => {
+document.getElementById('img-upload').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
-  if (file.size > 2 * 1024 * 1024) { showImgWarn(); return; }
-  const reader = new FileReader();
-  reader.onload = ev => {
-    S.bg = { type: 'image', imgData: ev.target.result, brightness: imgBrightness, blur: imgBlur };
-    applyBg(); save();
-  };
-  reader.readAsDataURL(file);
+  if (file.size > IMG_SIZE_WARN_BYTES) { showImgWarn(); return; }
+
+  try {
+    const imageId = 'bg_' + Date.now();
+    await VelinStore.saveImageBlob(imageId, file);
+    // Drop any previously stored bg image blob — only one is kept at a time.
+    await VelinStore.deleteAllImagesExcept(imageId);
+    S.bg = { type: 'image', imageId, brightness: imgBrightness, blur: imgBlur };
+    save(true);
+    await applyBg();
+  } catch (err) {
+    console.error('Background image save failed:', err);
+    showImgWarn();
+  }
 });
 
 const brightSlider = document.getElementById('img-brightness');
@@ -614,7 +510,10 @@ brightSlider.value = imgBrightness;
 brightSlider.addEventListener('input', e => {
   imgBrightness = +e.target.value;
   document.getElementById('brightness-val').textContent = imgBrightness + '%';
-  if (S.bg.type === 'image') { S.bg.brightness = imgBrightness; save(); applyBg(); }
+  if (S.bg.type === 'image') {
+    S.bg.brightness = imgBrightness; save();
+    bgImgLayer.style.filter = `brightness(${imgBrightness}%) blur(${S.bg.blur || 0}px)`;
+  }
 });
 
 const blurSlider = document.getElementById('img-blur');
@@ -622,49 +521,23 @@ blurSlider.value = imgBlur;
 blurSlider.addEventListener('input', e => {
   imgBlur = +e.target.value;
   document.getElementById('blur-val').textContent = imgBlur + 'px';
-  if (S.bg.type === 'image') { S.bg.blur = imgBlur; save(); applyBg(); }
+  if (S.bg.type === 'image') {
+    S.bg.blur = imgBlur; save();
+    bgImgLayer.style.filter = `brightness(${S.bg.brightness || 100}%) blur(${imgBlur}px)`;
+  }
 });
 
 // ══════════════════════════════
 //  FAVICON HELPER
+//  In-memory Map for fast synchronous lookups, backed by VelinStore's
+//  normalized faviconCache store (each hostname is its own record, so
+//  caching thousands of favicons never risks a single oversized blob).
 // ══════════════════════════════
 const _favCache = new Map();
 const _favPending = new Map();
-const FAV_CACHE_LIMIT = 200;
-const FAV_CACHE_STORAGE_KEY = 'sp3_fav_cache_v1';
-const FAV_CACHE_SAVE_DEBOUNCE_MS = 250;
-let _favCacheSaveTimer = null;
+const FAV_CACHE_LIMIT = 500;
 
-function persistFaviconCacheNow() {
-  try {
-    const out = {};
-    for (const [hostname, entry] of _favCache) { out[hostname] = { u: entry.url, t: entry.ts }; }
-    localStorage.setItem(FAV_CACHE_STORAGE_KEY, JSON.stringify(out));
-  } catch (e) { }
-}
-
-function schedulePersistFaviconCache() {
-  if (_favCacheSaveTimer) clearTimeout(_favCacheSaveTimer);
-  _favCacheSaveTimer = setTimeout(() => { _favCacheSaveTimer = null; persistFaviconCacheNow(); }, FAV_CACHE_SAVE_DEBOUNCE_MS);
-}
-
-function loadPersistedFaviconCache() {
-  try {
-    const raw = localStorage.getItem(FAV_CACHE_STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
-    const entries = Object.entries(parsed)
-      .filter(([hostname, entry]) => hostname && entry && typeof entry === 'object')
-      .sort((a, b) => (a[1].t || 0) - (b[1].t || 0));
-    entries.forEach(([hostname, entry]) => {
-      _favCache.set(hostname, { url: entry.u ?? null, ts: entry.t || Date.now() });
-    });
-    while (_favCache.size > FAV_CACHE_LIMIT) { _favCache.delete(_favCache.keys().next().value); }
-  } catch (e) { }
-}
-
-function getCachedFavicon(hostname) {
+function loadCachedFaviconEntry(hostname) {
   if (!_favCache.has(hostname)) return undefined;
   const entry = _favCache.get(hostname);
   _favCache.delete(hostname);
@@ -672,19 +545,20 @@ function getCachedFavicon(hostname) {
   return entry.url;
 }
 
+function getCachedFavicon(hostname) { return loadCachedFaviconEntry(hostname); }
+
 function setCachedFavicon(hostname, value) {
   if (_favCache.has(hostname)) _favCache.delete(hostname);
   _favCache.set(hostname, { url: value ?? null, ts: Date.now() });
   if (_favCache.size > FAV_CACHE_LIMIT) { _favCache.delete(_favCache.keys().next().value); }
-  schedulePersistFaviconCache();
+  VelinStore.setFaviconCache(hostname, value ?? null);
 }
 
 function removeCachedFavicon(hostname) {
   if (!hostname) return;
-  let changed = false;
-  if (_favCache.has(hostname)) { _favCache.delete(hostname); changed = true; }
-  if (_favPending.has(hostname)) { _favPending.delete(hostname); changed = true; }
-  if (changed) schedulePersistFaviconCache();
+  _favCache.delete(hostname);
+  _favPending.delete(hostname);
+  VelinStore.deleteFaviconCache(hostname).catch(() => {});
 }
 
 // FIX: Null out onload/onerror inside the timeout callback so a late-arriving
@@ -746,10 +620,17 @@ function loadFavicon(fav, fallbackEl, hostname) {
   });
 }
 
-loadPersistedFaviconCache();
-window.addEventListener('beforeunload', () => {
-  if (_favCacheSaveTimer) { clearTimeout(_favCacheSaveTimer); _favCacheSaveTimer = null; persistFaviconCacheNow(); }
-});
+// Favicon cache is hydrated lazily inside bootApp() (see below) since it now
+// lives in IndexedDB and reading it is async.
+async function loadPersistedFaviconCache() {
+  try {
+    const rows = await VelinStore.getFaviconCacheAll();
+    rows.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    rows.forEach(row => { _favCache.set(row.hostname, { url: row.url, ts: row.ts || Date.now() }); });
+    while (_favCache.size > FAV_CACHE_LIMIT) { _favCache.delete(_favCache.keys().next().value); }
+    VelinStore.pruneFaviconCache(FAV_CACHE_LIMIT).catch(() => {});
+  } catch (e) { /* non-fatal — favicon lookups just re-resolve from network */ }
+}
 
 // ══════════════════════════════
 //  WIDGET ENGINE
@@ -800,7 +681,7 @@ function makeDraggable(el, handle, id) {
   const onUp = () => {
     el.classList.remove('dragging');
     if (wRefs[id]) { wRefs[id].cfg.x = el.offsetLeft; wRefs[id].cfg.y = el.offsetTop; }
-    saveWidgets();
+    saveWidgets(id);
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
   };
@@ -849,7 +730,7 @@ function makeResizable(el, handle, id) {
 
   const onUp = () => {
     el.classList.remove('resizing');
-    saveWidgets();
+    saveWidgets(id);
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     if (resizeRaf) { cancelAnimationFrame(resizeRaf); resizeRaf = 0; }
@@ -876,7 +757,20 @@ function makeResizable(el, handle, id) {
 }
 
 // Rebuild the persisted widget array from live widget refs and debounce a save.
-function saveWidgets() { S.widgets = Object.values(wRefs).map(r => r.cfg); save(); }
+// Persist widget configs. Each widget is written as its own IndexedDB record
+// (VelinStore debounces per-widget-id independently), so editing one widget's
+// text/todos never touches or re-serializes any other widget's data.
+// Pass a specific id when only one widget changed (preferred, cheaper);
+// omitting it falls back to writing every live widget (safe, still cheap
+// since each is independently debounced and no-op puts are near-free).
+function saveWidgets(onlyId) {
+  S.widgets = Object.values(wRefs).map(r => r.cfg);
+  if (onlyId && wRefs[onlyId]) {
+    VelinStore.saveWidget(wRefs[onlyId].cfg, false);
+    return;
+  }
+  Object.values(wRefs).forEach(r => VelinStore.saveWidget(r.cfg, false));
+}
 
 // ══════════════════════════════
 //  WIDGET BODIES
@@ -928,7 +822,7 @@ function buildClock(body, cfg, id) {
     cfg.clockMode = m;
     dig.style.display = m === 'digital' ? '' : 'none';
     ana.style.display = m === 'analog' ? 'block' : 'none';
-    if (persist) saveWidgets();
+    if (persist) saveWidgets(id);
   }
 
   dig.addEventListener('click', () => { if (!viewMode) setMode('analog', true); });
@@ -1067,10 +961,10 @@ function buildTodo(body, cfg, id) {
     cfg.todos.forEach((t, i) => {
       const row = document.createElement('div'); row.className = 'ti' + (t.done ? ' done' : '');
       const chk = document.createElement('div'); chk.className = 'ti-chk' + (t.done ? ' on' : '');
-      chk.addEventListener('click', () => { cfg.todos[i].done = !cfg.todos[i].done; saveWidgets(); renderTodos(); });
+      chk.addEventListener('click', () => { cfg.todos[i].done = !cfg.todos[i].done; saveWidgets(id); renderTodos(); });
       const txt = document.createElement('span'); txt.className = 'ti-text'; txt.textContent = t.text;
       const del = document.createElement('span'); del.className = 'ti-del'; del.textContent = '×';
-      del.addEventListener('click', () => { cfg.todos.splice(i, 1); saveWidgets(); renderTodos(); });
+      del.addEventListener('click', () => { cfg.todos.splice(i, 1); saveWidgets(id); renderTodos(); });
       row.appendChild(chk); row.appendChild(txt); row.appendChild(del); list.appendChild(row);
     });
   }
@@ -1082,7 +976,7 @@ function buildTodo(body, cfg, id) {
   function addTodo() {
     const inp = row.querySelector('input'), v = inp.value.trim();
     if (!v) return;
-    cfg.todos.push({ text: v, done: false }); saveWidgets(); renderTodos(); inp.value = '';
+    cfg.todos.push({ text: v, done: false }); saveWidgets(id); renderTodos(); inp.value = '';
   }
   row.querySelector('.add-btn').addEventListener('click', addTodo);
   row.querySelector('input').addEventListener('keydown', e => { if (e.key === 'Enter') addTodo(); });
@@ -1091,7 +985,7 @@ function buildTodo(body, cfg, id) {
   if (wp) {
     const acts = wp.querySelector('.wp-actions');
     const cb = document.createElement('button'); cb.className = 'wp-btn todo-clear-btn'; cb.title = 'clear done'; cb.textContent = '✓×';
-    cb.addEventListener('click', () => { cfg.todos = cfg.todos.filter(t => !t.done); saveWidgets(); renderTodos(); });
+    cb.addEventListener('click', () => { cfg.todos = cfg.todos.filter(t => !t.done); saveWidgets(id); renderTodos(); });
     acts.insertBefore(cb, acts.firstChild);
   }
 
@@ -1123,7 +1017,7 @@ function buildNote(body, cfg, id) {
   const ta = document.createElement('textarea'); ta.className = 'note-edit-area';
   ta.placeholder = '**bold** *italic* `code`\n# heading\n- list';
   ta.value = cfg.noteContent;
-  ta.addEventListener('input', () => { cfg.noteContent = ta.value; saveWidgets(); });
+  ta.addEventListener('input', () => { cfg.noteContent = ta.value; saveWidgets(id); });
 
   const prev = document.createElement('div'); prev.className = 'note-preview-area';
 
@@ -1139,19 +1033,19 @@ function buildNote(body, cfg, id) {
   function wrap(a, b) {
     const s = ta.selectionStart, e = ta.selectionEnd, sel = ta.value.substring(s, e);
     ta.setRangeText(a + sel + b, s, e, 'end');
-    cfg.noteContent = ta.value; saveWidgets(); ta.focus();
+    cfg.noteContent = ta.value; saveWidgets(id); ta.focus();
   }
   function insertLine(prefix) {
     const s = ta.selectionStart;
     ta.setRangeText('\n' + prefix, s, s, 'end');
-    cfg.noteContent = ta.value; saveWidgets(); ta.focus();
+    cfg.noteContent = ta.value; saveWidgets(id); ta.focus();
   }
 
   const wp = document.getElementById('wp-' + id);
   if (wp) {
     const acts = wp.querySelector('.wp-actions');
     const cb = document.createElement('button'); cb.className = 'wp-btn'; cb.title = 'clear'; cb.textContent = '⌫';
-    cb.addEventListener('click', () => { ta.value = ''; cfg.noteContent = ''; saveWidgets(); prev.innerHTML = ''; });
+    cb.addEventListener('click', () => { ta.value = ''; cfg.noteContent = ''; saveWidgets(id); prev.innerHTML = ''; });
     acts.insertBefore(cb, acts.firstChild);
   }
 
@@ -1182,8 +1076,8 @@ function buildPomodoro(body, cfg, id) {
   const MODES = { focus: 25 * 60, shortBreak: 5 * 60, longBreak: 15 * 60 };
   const STATE_VERSION = 1;
   const STORAGE_SYNC_INTERVAL_MS = 10000;
-  const TAB_ID = (window.__sp3TabId = window.__sp3TabId || (Date.now().toString(36) + Math.random().toString(36).slice(2)));
-  const LOCK_KEY = 'sp3_pomo_lock_' + id;
+  const TAB_ID = (window.__velinTabId = window.__velinTabId || (Date.now().toString(36) + Math.random().toString(36).slice(2)));
+  const LOCK_NAME = 'pomo_' + id;
   const LOCK_TTL_MS = 15000;
   const LOCK_RENEW_INTERVAL_MS = 5000;
   let uiTimer = null;
@@ -1220,36 +1114,27 @@ function buildPomodoro(body, cfg, id) {
     version: STATE_VERSION, updatedAt: 0, writerId: ''
   });
 
-  function saveWidgetsImmediate() { S.widgets = Object.values(wRefs).map(r => r.cfg); save(true); }
-
-  function readLock() {
-    try {
-      const raw = localStorage.getItem(LOCK_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return null;
-      if (typeof parsed.ownerId !== 'string') return null;
-      if (!Number.isFinite(+parsed.expiresAt)) return null;
-      return { ownerId: parsed.ownerId, expiresAt: Math.floor(+parsed.expiresAt) };
-    } catch (e) { return null; }
+  // Pomodoro persists frequently (every state transition, cross-tab sync).
+  // Write only this widget's own record — critical since a running timer
+  // would otherwise re-serialize every other widget once a second.
+  function saveWidgetsImmediate() {
+    S.widgets = Object.values(wRefs).map(r => r.cfg);
+    VelinStore.saveWidget(cfg, true);
   }
 
-  function writeLock(ownerId, expiresAt) {
-    try { localStorage.setItem(LOCK_KEY, JSON.stringify({ ownerId, expiresAt })); return true; }
-    catch (e) { return false; }
-  }
-
+  // Locking delegates to VelinStore's shared cross-tab lock (localStorage-backed,
+  // synchronous, tiny payload — appropriate for a lock, unlike bulk app data).
   function isLockOwnedByMe() {
-    const lock = readLock();
+    const lock = VelinStore.readLock(LOCK_NAME);
     return !!(lock && lock.ownerId === TAB_ID && lock.expiresAt > Date.now());
   }
 
   function tryAcquireLock(force = false) {
     const now = Date.now();
-    const lock = readLock();
+    const lock = VelinStore.readLock(LOCK_NAME);
     const canAcquire = force || !lock || lock.expiresAt <= now || lock.ownerId === TAB_ID;
     if (!canAcquire) return false;
-    const ok = writeLock(TAB_ID, now + LOCK_TTL_MS);
+    const ok = VelinStore.writeLock(LOCK_NAME, TAB_ID, now + LOCK_TTL_MS);
     if (ok) lastLockRenewAt = now;
     return ok;
   }
@@ -1258,15 +1143,12 @@ function buildPomodoro(body, cfg, id) {
     if (!isLockOwnedByMe()) return false;
     const now = Date.now();
     if ((now - lastLockRenewAt) < LOCK_RENEW_INTERVAL_MS) return true;
-    const ok = writeLock(TAB_ID, now + LOCK_TTL_MS);
+    const ok = VelinStore.writeLock(LOCK_NAME, TAB_ID, now + LOCK_TTL_MS);
     if (ok) lastLockRenewAt = now;
     return ok;
   }
 
-  function releaseLock() {
-    try { const lock = readLock(); if (lock && lock.ownerId === TAB_ID) localStorage.removeItem(LOCK_KEY); }
-    catch (e) { }
-  }
+  function releaseLock() { VelinStore.releaseLock(LOCK_NAME, TAB_ID); }
 
   function isRemoteFresher(remote, local) {
     if (remote.version > local.version) return true;
@@ -1282,38 +1164,41 @@ function buildPomodoro(body, cfg, id) {
     return merged;
   }
 
-  // FIX: syncStateFromStorage throttled at 300ms minimum between calls so
-  // rapid focus/visibilitychange events can't block tab activation with a
-  // synchronous JSON.parse on every fired event.
+  // FIX (v2): reads this widget's own normalized IDB record directly instead
+  // of parsing a whole-app JSON blob that no longer exists in the new storage
+  // design. Throttled to avoid event-storm stalls on rapid focus/visibility
+  // changes; still async since IDB reads are async, so callers await it.
   const SYNC_MIN_INTERVAL_MS = 300;
   let lastSyncCallAt = 0;
+  let _syncInFlight = null;
 
-  function syncStateFromStorage(force = false) {
+  async function syncStateFromStorage(force = false) {
     const now = Date.now();
     if (!force) {
       if (document.hidden) return;
       if ((now - lastStorageSyncAt) < STORAGE_SYNC_INTERVAL_MS) return;
     }
-    // Throttle even forced calls to 300ms to prevent event-storm stalls
     if ((now - lastSyncCallAt) < SYNC_MIN_INTERVAL_MS) return;
     lastSyncCallAt = now;
     lastStorageSyncAt = now;
 
-    try {
-      // Read from LS fallback key (IDB writes are async; LS is always up-to-date on unload)
-      const raw = localStorage.getItem(LS_FALLBACK_KEY) || localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (!parsed || !Array.isArray(parsed.widgets)) return;
-      const remoteCfg = parsed.widgets.find(w => w && w.id === cfg.id);
-      if (!remoteCfg || !remoteCfg.pomoState) return;
-      const remoteState = normalizeState(remoteCfg.pomoState);
-      if (remoteState.version === state.version) {
-        state = mergeEqualVersion(remoteState, state);
-      } else if (isRemoteFresher(remoteState, state)) {
-        state = remoteState;
-      }
-    } catch (e) { }
+    // Coalesce overlapping calls into a single in-flight read.
+    if (_syncInFlight) return _syncInFlight;
+
+    _syncInFlight = (async () => {
+      try {
+        const remoteCfg = await VelinStore.getAllWidgets().then(all => all.find(w => w && w.id === cfg.id));
+        if (!remoteCfg || !remoteCfg.pomoState) return;
+        const remoteState = normalizeState(remoteCfg.pomoState);
+        if (remoteState.version === state.version) {
+          state = mergeEqualVersion(remoteState, state);
+        } else if (isRemoteFresher(remoteState, state)) {
+          state = remoteState;
+        }
+      } catch (e) { /* non-fatal — next tick will retry */ }
+    })();
+
+    try { await _syncInFlight; } finally { _syncInFlight = null; }
   }
 
   function persistState() {
@@ -1396,8 +1281,8 @@ function buildPomodoro(body, cfg, id) {
     </div>
     <div class="pomo-sessions">sessions: <span id="psc-${id}">${state.sessionsCompleted}</span></div>`;
 
-  function upd() {
-    syncStateFromStorage(false);
+  async function upd() {
+    await syncStateFromStorage(false);
     const prevMode = state.mode;
     const prevStatus = state.status;
     applyCatchUp();
@@ -1420,9 +1305,9 @@ function buildPomodoro(body, cfg, id) {
     body.querySelectorAll('.pomo-mode').forEach(m => m.classList.toggle('active', m.dataset.m === state.mode));
   }
 
-  document.getElementById('ps-' + id).addEventListener('click', () => {
+  document.getElementById('ps-' + id).addEventListener('click', async () => {
     const now = Date.now();
-    tryAcquireLock(true); syncStateFromStorage(true); applyCatchUp();
+    tryAcquireLock(true); await syncStateFromStorage(true); applyCatchUp();
     if (state.status === 'running') {
       const remainingMs = getRemainingMs(now);
       state.status = 'paused'; state.startedAt = null; state.endsAt = remainingMs;
@@ -1450,12 +1335,14 @@ function buildPomodoro(body, cfg, id) {
     persistState(); releaseLock(); upd();
   }));
 
-  // FIX: Both focus and visibilitychange call syncStateFromStorage which is now
-  // throttled at 300ms, preventing event-storm stalls on rapid tab switching.
-  function onWindowResume() { syncStateFromStorage(true); applyCatchUp(); upd(); }
+  // Both focus and visibilitychange trigger a resync; syncStateFromStorage's
+  // internal throttle prevents event-storm stalls on rapid tab switching.
+  async function onWindowResume() { await syncStateFromStorage(true); applyCatchUp(); upd(); }
   function onStorageSync(e) {
-    if (e.key !== STORAGE_KEY && e.key !== LOCK_KEY) return;
-    syncStateFromStorage(true); upd();
+    // Cross-tab ping is a single small key now (see VelinStore), not a
+    // whole-app-blob key — any ping means "something changed, re-check".
+    if (!e.key || (!e.key.startsWith('velin_sync_ping') && !e.key.startsWith('velin_lock_pomo_' + id))) return;
+    upd();
   }
   function onBeforeUnload() { releaseLock(); }
 
@@ -1476,8 +1363,7 @@ function buildPomodoro(body, cfg, id) {
     releaseLock();
   });
 
-  syncStateFromStorage(true);
-  upd();
+  syncStateFromStorage(true).then(upd);
 }
 
 // ══════════════════════════════
@@ -1490,7 +1376,7 @@ function closeWidget(id) {
   ref.el.remove();
   delete wRefs[id];
   S.widgets = S.widgets.filter(w => w.id !== id);
-  save();
+  VelinStore.deleteWidget(id);
 }
 
 canvas.addEventListener('click', e => {
@@ -1508,7 +1394,7 @@ const defSizes = { clock: { w: 280, h: 160 }, bookmark: { w: 100, h: 100 }, todo
 document.querySelectorAll('[data-add]').forEach(btn => btn.addEventListener('click', () => {
   const type = btn.dataset.add, sz = defSizes[type];
   const cfg = { id: 'w' + Date.now(), type, x: snap(80 + Math.random() * 200), y: snap(80 + Math.random() * 100), w: sz.w, h: sz.h };
-  S.widgets.push(cfg); makeWidget(cfg); saveWidgets();
+  S.widgets.push(cfg); makeWidget(cfg); saveWidgets(cfg.id);
 }));
 
 // ══════════════════════════════
@@ -1536,7 +1422,11 @@ function renderBmSaved() {
     del.addEventListener('click', e => {
       e.stopPropagation();
       const idx = S.bookmarks.indexOf(bm);
-      if (idx !== -1) { S.bookmarks.splice(idx, 1); removeCachedFavicon(getHostname(bm.url)); save(); }
+      if (idx !== -1) {
+        S.bookmarks.splice(idx, 1);
+        removeCachedFavicon(getHostname(bm.url));
+        VelinStore.deleteBookmark(bm.id);
+      }
       renderBmSaved();
     });
 
@@ -1546,7 +1436,7 @@ function renderBmSaved() {
     item.addEventListener('click', () => {
       const sz = defSizes.bookmark;
       const cfg = { id: 'w' + Date.now(), type: 'bookmark', bmUrl: bm.url, bmName: bm.name, x: snap(100 + Math.random() * 300), y: snap(100 + Math.random() * 200), w: sz.w, h: sz.h };
-      S.widgets.push(cfg); makeWidget(cfg); saveWidgets();
+      S.widgets.push(cfg); makeWidget(cfg); saveWidgets(cfg.id);
       bmPanel.classList.remove('open');
     });
 
@@ -1564,7 +1454,10 @@ document.getElementById('bm-add-btn').addEventListener('click', () => {
   if (!url) return;
   url = normalizeHttpUrl(url);
   if (!url) { showNotification('Invalid URL', { body: 'Only http and https URLs are allowed.' }); return; }
-  S.bookmarks.push({ name: name || url, url }); save(); renderBmSaved();
+  const bm = { id: 'bm_' + Date.now(), name: name || url, url };
+  S.bookmarks.push(bm);
+  VelinStore.saveBookmark(bm, true);
+  renderBmSaved();
   document.getElementById('bm-name-inp').value = ''; document.getElementById('bm-url-inp').value = '';
 });
 
@@ -1653,48 +1546,50 @@ ftSizeDecBtn.addEventListener('click', () => {
   if (!activeFT) return;
   activeFT.noteObj.size = clampFtSize((activeFT.noteObj.size || 14) - 1);
   applyFTStyles(activeFT.ta, activeFT.noteObj);
-  ftSizeRead.textContent = activeFT.noteObj.size + 'px'; save(); activeFT.ta.focus();
+  ftSizeRead.textContent = activeFT.noteObj.size + 'px'; VelinStore.saveFtNote(activeFT.noteObj); activeFT.ta.focus();
 });
 ftSizeIncBtn.addEventListener('click', () => {
   if (!activeFT) return;
   activeFT.noteObj.size = clampFtSize((activeFT.noteObj.size || 14) + 1);
   applyFTStyles(activeFT.ta, activeFT.noteObj);
-  ftSizeRead.textContent = activeFT.noteObj.size + 'px'; save(); activeFT.ta.focus();
+  ftSizeRead.textContent = activeFT.noteObj.size + 'px'; VelinStore.saveFtNote(activeFT.noteObj); activeFT.ta.focus();
 });
 ftRotDecBtn.addEventListener('click', () => {
   if (!activeFT) return;
   activeFT.noteObj.rot = normalizeRotation((activeFT.noteObj.rot || 0) - 5);
   applyFTRotation(activeFT.wrap, activeFT.noteObj);
-  ftRotRead.textContent = activeFT.noteObj.rot + '°'; positionFtStylebar(); save(); activeFT.ta.focus();
+  ftRotRead.textContent = activeFT.noteObj.rot + '°'; positionFtStylebar(); VelinStore.saveFtNote(activeFT.noteObj); activeFT.ta.focus();
 });
 ftRotIncBtn.addEventListener('click', () => {
   if (!activeFT) return;
   activeFT.noteObj.rot = normalizeRotation((activeFT.noteObj.rot || 0) + 5);
   applyFTRotation(activeFT.wrap, activeFT.noteObj);
-  ftRotRead.textContent = activeFT.noteObj.rot + '°'; positionFtStylebar(); save(); activeFT.ta.focus();
+  ftRotRead.textContent = activeFT.noteObj.rot + '°'; positionFtStylebar(); VelinStore.saveFtNote(activeFT.noteObj); activeFT.ta.focus();
 });
 ftBoldBtn.addEventListener('click', () => {
   if (!activeFT) return;
   activeFT.noteObj.weight = activeFT.noteObj.weight === 600 ? 400 : 600;
   applyFTStyles(activeFT.ta, activeFT.noteObj);
-  ftBoldBtn.classList.toggle('active', activeFT.noteObj.weight === 600); save(); activeFT.ta.focus();
+  ftBoldBtn.classList.toggle('active', activeFT.noteObj.weight === 600); VelinStore.saveFtNote(activeFT.noteObj); activeFT.ta.focus();
 });
 ftColorInp.addEventListener('input', () => {
   if (!activeFT) return;
   activeFT.noteObj.color = ftColorInp.value;
-  applyFTStyles(activeFT.ta, activeFT.noteObj); save();
+  applyFTStyles(activeFT.ta, activeFT.noteObj); VelinStore.saveFtNote(activeFT.noteObj);
 });
 ftDeleteBtn.addEventListener('click', () => {
   if (!activeFT) return;
   const idx = S.ftNotes.indexOf(activeFT.noteObj);
   if (idx !== -1) S.ftNotes.splice(idx, 1);
-  activeFT.wrap.remove(); setActiveFT(null); save();
+  VelinStore.deleteFtNote(activeFT.noteObj.id);
+  activeFT.wrap.remove(); setActiveFT(null);
 });
 window.addEventListener('resize', positionFtStylebar);
 
 function makeFTNote(noteObj) {
   // Free-text notes are independent absolutely positioned editors with drag,
   // resize, rotation, and formatting state stored alongside the text.
+  if (!noteObj.id) noteObj.id = 'ft_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   if (typeof noteObj.w !== 'number') noteObj.w = 140;
   if (typeof noteObj.h !== 'number') noteObj.h = 0;
   if (typeof noteObj.size !== 'number') noteObj.size = 14;
@@ -1718,7 +1613,7 @@ function makeFTNote(noteObj) {
 
   ta.addEventListener('input', () => {
     if (noteObj.h > 0) { ta.style.overflowY = 'auto'; } else { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
-    noteObj.text = ta.value; save(); positionFtStylebar();
+    noteObj.text = ta.value; VelinStore.saveFtNote(noteObj); positionFtStylebar();
   });
   ta.addEventListener('focus', () => setActiveFT({ noteObj, ta, wrap }));
   ta.addEventListener('click', () => setActiveFT({ noteObj, ta, wrap }));
@@ -1737,7 +1632,7 @@ function makeFTNote(noteObj) {
   const onUp = () => {
     if (!dr2) return;
     dr2 = false;
-    noteObj.x = wrap.offsetLeft; noteObj.y = wrap.offsetTop; save();
+    noteObj.x = wrap.offsetLeft; noteObj.y = wrap.offsetTop; VelinStore.saveFtNote(noteObj, true);
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     if (activeFT && activeFT.noteObj === noteObj) positionFtStylebar();
@@ -1755,7 +1650,7 @@ function makeFTNote(noteObj) {
     rs2 = false;
     document.removeEventListener('mousemove', onResizeMove);
     document.removeEventListener('mouseup', onResizeUp);
-    save();
+    VelinStore.saveFtNote(noteObj, true);
   };
 
   wrap.addEventListener('mousedown', e => {
@@ -1781,7 +1676,7 @@ function makeFTNote(noteObj) {
     document.removeEventListener('mouseup', onUp);
     document.removeEventListener('mousemove', onResizeMove);
     document.removeEventListener('mouseup', onResizeUp);
-    save(); wrap.remove();
+    VelinStore.deleteFtNote(noteObj.id); wrap.remove();
   });
 
   wrap.appendChild(del); wrap.appendChild(rz); wrap.appendChild(ta); canvas.appendChild(wrap);
@@ -1810,8 +1705,9 @@ canvas.addEventListener('click', e => {
   if (!ftMode) return;
   if (e.target.classList.contains('ft-note') || e.target.classList.contains('ft-del-btn') || e.target.classList.contains('ft-wrapper') || e.target.classList.contains('ft-resize')) return;
   if (e.target.closest('.wp')) return;
-  const note = { x: e.clientX, y: e.clientY, text: '', w: 140, h: 0, size: 14, weight: 400, color: '', rot: 0 };
-  S.ftNotes.push(note); save();
+  const note = { id: 'ft_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), x: e.clientX, y: e.clientY, text: '', w: 140, h: 0, size: 14, weight: 400, color: '', rot: 0 };
+  S.ftNotes.push(note);
+  VelinStore.saveFtNote(note, true);
   makeFTNote(note);
   setTimeout(() => { const all = document.querySelectorAll('.ft-note'); if (all.length) all[all.length - 1].focus(); }, 30);
 });
@@ -1825,43 +1721,39 @@ document.addEventListener('keydown', e => {
 
 // ══════════════════════════════
 //  EXPORT / IMPORT
+//  Exports every normalized store (meta, widgets, bookmarks, ftNotes) plus
+//  the background image Blob (inlined as base64 only for this portable
+//  file — normal runtime storage never touches base64).
 // ══════════════════════════════
-function exportSettings() {
-  // Export the full in-memory state as a portable JSON snapshot.
-  const data = JSON.stringify(S, null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `startpage-settings-${new Date().toISOString().split('T')[0]}.json`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-  showNotification('Settings exported', { body: 'Your startpage settings have been saved.' });
+async function exportSettings() {
+  try {
+    const data = await VelinStore.exportAll();
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `velin-settings-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    showNotification('Settings exported', { body: 'Your Velin settings have been saved.' });
+  } catch (e) {
+    console.error('Export failed:', e);
+    showNotification('Export failed', { body: 'Could not read settings from storage.' });
+  }
 }
 
 function importSettings(file) {
-  // Validate, sanitize, merge, and persist imported settings before reload.
-  if (!file || file.size > 5 * 1024 * 1024) { showNotification('Import failed', { body: 'File is missing or too large.' }); return; }
+  // Validate, then hand off to VelinStore.importAll which wipes and
+  // repopulates the normalized stores (including converting any exported
+  // base64 images back to Blobs) before reloading.
+  if (!file || file.size > 20 * 1024 * 1024) { showNotification('Import failed', { body: 'File is missing or too large.' }); return; }
   const reader = new FileReader();
-  reader.onload = ev => {
+  reader.onload = async ev => {
     try {
       const imported = JSON.parse(ev.target.result);
       if (!imported || typeof imported !== 'object' || Array.isArray(imported)) throw new Error('Invalid root object');
-      const sanitized = sanitizeLoadedState(imported);
-      if (!sanitized) throw new Error('Invalid structure');
-      dMerge(S, sanitized);
-      if (!Array.isArray(S.widgets))   S.widgets = [];
-      if (!Array.isArray(S.ftNotes))   S.ftNotes = [];
-      if (!Array.isArray(S.bookmarks)) S.bookmarks = [];
-      // Write to both IDB and LS so either path gets fresh data on next boot
-      const compressed = compressStateForStorage(S);
-      const doReload = () => {
-        showNotification('Settings imported', { body: 'Reloading with new settings...' });
-        setTimeout(() => location.reload(), 500);
-      };
-      if (_dbReady && !_dbFailed) {
-        idbPut(compressed).then(doReload).catch(() => { lsFallbackSave(compressed); doReload(); });
-      } else {
-        lsFallbackSave(compressed); doReload();
-      }
+      await VelinStore.importAll(imported);
+      showNotification('Settings imported', { body: 'Reloading with new settings...' });
+      setTimeout(() => location.reload(), 500);
     } catch (e) {
       showNotification('Import failed', { body: 'Invalid file or corrupted data.' });
       console.error('Import error:', e);
