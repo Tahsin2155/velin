@@ -13,6 +13,8 @@ script.js    everything else
 styles.css   themes and layout
 ```
 
+See [user-guide.md](user-guide.md) for the full usage guide, including widgets, background settings, keyboard shortcuts, and export/import details.
+
 There's no `src/`, no bundler config, no `package.json`. `storage.js` must load before `script.js` (it already does, in `index.html`). If you want to change something, open `script.js` and find the section header (the code is split into commented blocks like `WIDGET ENGINE`, `POMODORO`, `FREE TEXT`).
 
 ## Widgets
