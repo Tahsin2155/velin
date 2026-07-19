@@ -59,16 +59,26 @@ let S = JSON.parse(JSON.stringify(DEF));
 //  instead of re-serializing the entire app state on every call.
 // ══════════════════════════════
 
-// Generic "something changed, persist relevant meta" — covers theme,
-// blurMode, viewMode, bg (the non-widget/bookmark/ftNote state on S).
-function save(flush = false) {
-  VelinStore.setMeta('theme', S.theme, flush);
-  VelinStore.setMeta('blurMode', S.blurMode, flush);
-  VelinStore.setMeta('viewMode', S.viewMode, flush);
-  VelinStore.setMeta('bg', S.bg, flush);
-}
+// Per-key persistence — each setter writes ONLY the one meta key that
+// actually changed. This is deliberate: the old bundled save() re-wrote
+// theme+blurMode+viewMode+bg together on every call, so any one of them
+// changing could stomp the other three with whatever (possibly stale or
+// still-default) value happened to be sitting on S at that moment — e.g.
+// a theme click before bg had finished loading would persist the default
+// black bg over a real saved background.
+//
+// _saveGuard: while true, these are no-ops. This exists to stop the
+// synchronous pre-boot paint calls (applyTheme/applyBlurMode/applyMode/
+// applyBg run once before bootApp()'s IndexedDB load resolves, purely to
+// paint the UI with sane defaults) from writing those defaults to storage
+// and racing with / clobbering the real persisted values bootApp() is
+// about to load. bootApp() flips this to false once S holds real data.
+let _saveGuard = true;
 
-function saveNow() { save(true); }
+function saveTheme(flush = false) { if (_saveGuard) return; VelinStore.setMeta('theme', S.theme, flush); }
+function saveBlurMode(flush = false) { if (_saveGuard) return; VelinStore.setMeta('blurMode', S.blurMode, flush); }
+function saveViewMode(flush = false) { if (_saveGuard) return; VelinStore.setMeta('viewMode', S.viewMode, flush); }
+function saveBg(flush = false) { if (_saveGuard) return; VelinStore.setMeta('bg', S.bg, flush); }
 
 // ══════════════════════════════
 //  BACKGROUND IMAGE SIZE GUARD
@@ -120,6 +130,11 @@ async function bootApp() {
     console.error('VelinStore boot failed, starting with defaults:', e);
     S.widgets = []; S.bookmarks = []; S.ftNotes = [];
   }
+
+  // From this point on, S holds either real persisted values or
+  // deliberate defaults (on load failure) — either way it's now safe
+  // for save*() calls to actually write to storage.
+  _saveGuard = false;
 
   viewMode = S.viewMode || false;
 
@@ -292,7 +307,7 @@ function applyTheme(t) {
     .split(' ').filter(c => !c.startsWith('t-') && c !== '').join(' ');
   document.body.classList.add('t-' + t);
   document.querySelectorAll('.theme-dot').forEach(d => d.classList.toggle('active', d.dataset.theme === t));
-  S.theme = t; save();
+  S.theme = t; saveTheme();
 }
 document.querySelectorAll('.theme-dot').forEach(d => d.addEventListener('click', () => applyTheme(d.dataset.theme)));
 applyTheme(S.theme);
@@ -340,7 +355,7 @@ function applyBlurMode(mode) {
   }
 
   S.blurMode = mode;
-  save();
+  saveBlurMode();
 }
 
 function cycleBlurMode() {
@@ -369,7 +384,7 @@ function applyMode() {
   document.body.classList.toggle('view-mode', viewMode);
   document.getElementById('mode-label').textContent = viewMode ? 'edit' : 'view';
   document.getElementById('mode-icon').textContent = viewMode ? '✎' : '✦';
-  S.viewMode = viewMode; save();
+  S.viewMode = viewMode; saveViewMode();
   emitModeChange(); // FIX: broadcast instead of per-widget MutationObserver
   if (typeof updateClockSize === 'function') {
     Object.values(wRefs).forEach(r => { if (r.cfg.type === 'clock') updateClockSize(r.cfg.id); });
@@ -425,7 +440,7 @@ async function applyBg() {
         bgImgLayer.style.opacity = 1;
       } else {
         // Referenced image missing (e.g. cleared elsewhere) — fall back to solid.
-        S.bg = { type: 'solid', value: '#0d0d0f' }; save(); applyBg();
+        S.bg = { type: 'solid', value: '#0d0d0f' }; saveBg(); applyBg();
       }
     } catch (e) {
       console.error('Failed to load background image blob:', e);
@@ -460,20 +475,20 @@ document.querySelectorAll('.color-swatch').forEach(sw => sw.addEventListener('cl
   document.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('active'));
   sw.classList.add('active');
   await clearOldBgImageIfAny();
-  S.bg = { type: 'solid', value: sw.dataset.color }; save(true); applyBg();
+  S.bg = { type: 'solid', value: sw.dataset.color }; saveBg(true); applyBg();
 }));
 
 document.getElementById('solid-color-picker').addEventListener('input', async e => {
   document.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('active'));
   await clearOldBgImageIfAny();
-  S.bg = { type: 'solid', value: e.target.value }; save(true); applyBg();
+  S.bg = { type: 'solid', value: e.target.value }; saveBg(true); applyBg();
 });
 
 document.querySelectorAll('.grad-preset').forEach(gp => gp.addEventListener('click', async () => {
   document.querySelectorAll('.grad-preset').forEach(x => x.classList.remove('active'));
   gp.classList.add('active');
   await clearOldBgImageIfAny();
-  S.bg = { type: 'gradient', value: gp.dataset.grad }; save(true); applyBg();
+  S.bg = { type: 'gradient', value: gp.dataset.grad }; saveBg(true); applyBg();
 }));
 
 async function buildCustomGrad() {
@@ -482,7 +497,7 @@ async function buildCustomGrad() {
   const dir = document.getElementById('grad-dir').value;
   await clearOldBgImageIfAny();
   S.bg = { type: 'gradient', value: `linear-gradient(${dir},${c1},${c2})` };
-  save(true); applyBg();
+  saveBg(true); applyBg();
 }
 ['grad-c1', 'grad-c2', 'grad-dir'].forEach(id => document.getElementById(id).addEventListener('input', buildCustomGrad));
 
@@ -497,7 +512,7 @@ document.getElementById('img-upload').addEventListener('change', async e => {
     // Drop any previously stored bg image blob — only one is kept at a time.
     await VelinStore.deleteAllImagesExcept(imageId);
     S.bg = { type: 'image', imageId, brightness: imgBrightness, blur: imgBlur };
-    save(true);
+    saveBg(true);
     await applyBg();
   } catch (err) {
     console.error('Background image save failed:', err);
@@ -511,7 +526,7 @@ brightSlider.addEventListener('input', e => {
   imgBrightness = +e.target.value;
   document.getElementById('brightness-val').textContent = imgBrightness + '%';
   if (S.bg.type === 'image') {
-    S.bg.brightness = imgBrightness; save();
+    S.bg.brightness = imgBrightness; saveBg();
     bgImgLayer.style.filter = `brightness(${imgBrightness}%) blur(${S.bg.blur || 0}px)`;
   }
 });
@@ -522,7 +537,7 @@ blurSlider.addEventListener('input', e => {
   imgBlur = +e.target.value;
   document.getElementById('blur-val').textContent = imgBlur + 'px';
   if (S.bg.type === 'image') {
-    S.bg.blur = imgBlur; save();
+    S.bg.blur = imgBlur; saveBg();
     bgImgLayer.style.filter = `brightness(${S.bg.brightness || 100}%) blur(${imgBlur}px)`;
   }
 });
