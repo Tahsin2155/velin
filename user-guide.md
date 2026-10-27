@@ -6,7 +6,7 @@ Velin is a custom new-tab page: a blank canvas where you drop widgets, write fre
 
 ## Quick start
 
-1. Open a new tab (or `index.html` if you're running it standalone).
+1. Open a new tab (or `app.html` if you're running it standalone).
 2. Click **✦ view** (top area) to flip into **edit mode** — this unlocks dragging, resizing, and adding widgets.
 3. Use the **toolbar** at the bottom to add widgets, change the background, or place text.
 4. Flip back to **view mode** when you're done arranging things, so nothing moves by accident.
@@ -137,6 +137,6 @@ Everything is saved automatically and continuously — there's no save button to
 
 ---
 
-## Installing as an app (PWA)
+## Installing as an extension
 
-If your browser shows an "Install" prompt for Velin (via the address bar or menu), you can install it as a standalone app with its own icon, and it'll keep working offline once loaded.
+Velin has its own browser extension for Chrome, Edge and Brave, and can also be used on new tabs through another new-tab extension or a browser setting. See the guide page on the website for the steps.

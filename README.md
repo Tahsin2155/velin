@@ -2,12 +2,12 @@
 
 A new-tab start page. Widgets, notes, bookmarks, backgrounds — all in four files, no build step.
 
-Open `index.html` in a browser and it works.
+Open `app.html` in a browser and it works.
 
 ## Files
 
 ```
-index.html   page shell, toolbar, panels
+app.html     page shell, toolbar, panels
 storage.js   persistence engine (IndexedDB)
 script.js    everything else
 styles.css   themes and layout
@@ -15,7 +15,7 @@ styles.css   themes and layout
 
 See [user-guide.md](user-guide.md) for the full usage guide, including widgets, background settings, keyboard shortcuts, and export/import details.
 
-There's no `src/`, no bundler config, no `package.json`. `storage.js` must load before `script.js` (it already does, in `index.html`). If you want to change something, open `script.js` and find the section header (the code is split into commented blocks like `WIDGET ENGINE`, `POMODORO`, `FREE TEXT`).
+There's no `src/`, no bundler config, no `package.json`. `storage.js` must load before `script.js` (it already does, in `app.html`). If you want to change something, open `script.js` and find the section header (the code is split into commented blocks like `WIDGET ENGINE`, `POMODORO`, `FREE TEXT`).
 
 ## Widgets
 

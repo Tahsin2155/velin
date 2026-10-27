@@ -220,6 +220,10 @@ const VelinStore = (() => {
     return getAll(STORES.widgets).catch(() => []);
   }
 
+  async function getWidget(id) {
+    return get(STORES.widgets, id).catch(() => null);
+  }
+
   function saveWidget(cfg, flush = false) {
     return queueWrite(STORES.widgets, cfg, flush);
   }
@@ -486,7 +490,7 @@ const VelinStore = (() => {
   return {
     openDB, requestPersistence, getQuotaInfo,
     getMeta, setMeta, getAllMeta,
-    getAllWidgets, saveWidget, deleteWidget,
+    getAllWidgets, getWidget, saveWidget, deleteWidget,
     getAllBookmarks, saveBookmark, deleteBookmark,
     getAllFtNotes, saveFtNote, deleteFtNote,
     saveImageBlob, getImageBlob, deleteImageBlob, deleteAllImagesExcept,

@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Velin — New Tab",
+  "version": "1.0.0",
+  "description": "A new-tab start page with widgets, notes, bookmarks and backgrounds. Everything is stored locally in your browser.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnZHmSDTLC2vsZRMRf4scYWsICNTP7qFKqkH6Mdt7YFgOQ8nwh8eyHcDwCrJc1bmQdV5UxCAR5W2mi2wjCfPsVFN+pP4gem+EQRpqwLM23QYiuZ3hsprbtQgSw4Umc9sB59+zgIxjf/Qr2vpmTnHhZf4BMaVhahnD4GTOxEJil2r/fPRoHiWjpHU4xrvMXCl84j1wTe/ZwBAmfgwu/irnm4G4FMOkHtrTQbLIxapSlmsJQ85QCFJBKxexwPcQlQtvzNmSKYE6VK874Qs2HXHIUNuP5bhZ4xKX6au6VdMlYOTQw01sSsWty8IvPvNo4bdzOKVBUenKZjbKTyMJ4dBSAQIDAQAB",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "chrome_url_overrides": {
+    "newtab": "app.html"
+  },
+  "permissions": [
+    "unlimitedStorage"
+  ]
+}
