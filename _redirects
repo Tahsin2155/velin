@@ -1,0 +1,3 @@
+# Netlify: serve extensionless URLs (existing files always win over these rules)
+/app    /app.html    200
+/guide  /guide.html  200

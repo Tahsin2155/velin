@@ -1,219 +1,114 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Velin — a new-tab start page</title>
-  <meta name="description"
-    content="Velin is a new-tab start page with widgets, markdown notes, bookmarks and custom backgrounds. Free to use, and everything stays in your browser.">
+  <meta name="description" content="Velin is a new-tab start page with widgets, markdown notes, bookmarks and custom backgrounds. Free to use, and everything stays in your browser.">
   <link rel="icon" href="./favicon-dark.svg" media="(prefers-color-scheme: dark)" type="image/svg+xml">
   <link rel="icon" href="./favicon-light.svg" media="(prefers-color-scheme: light)" type="image/svg+xml">
-
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./landing.css">
 </head>
-
-<body>
-
+<body id="top">
   <header class="nav">
     <a class="brand" href="./">Velin</a>
     <nav>
-      <a href="#features">features</a>
-      <a href="#install">install</a>
-      <a href="./guide">guide</a>
-      <a href="#contact">contact</a>
-      <a href="https://github.com/Tahsin2155/velin">github</a>
+      <a href="./#features">Features</a>
+      <a href="./guide">Guide</a>
+      <a href="#contact">Contact</a>
+      <a href="https://github.com/Tahsin2155/velin">GitHub</a>
     </nav>
   </header>
 
   <main>
-
-    <!-- HERO -->
     <section class="hero">
-      <p class="eyebrow">a new-tab start page</p>
-      <h1>A new tab that's <em>yours.</em></h1>
-      <p class="lead">Velin is a start page for your browser. Add widgets, write markdown notes, pin bookmarks, pick a
-        background. It all saves in your browser — no account, no sync server.</p>
-
+      <h1>Make your new tab yours.</h1>
+      <p class="lead">Velin is a start page for your browser. Add widgets, write markdown notes, pin bookmarks and pick a background. It all saves in your browser, with no account and no sync server.</p>
       <div class="cta">
-        <a class="btn primary"
-          href="https://github.com/Tahsin2155/velin/releases/latest/download/velin-extension.zip">Get the extension</a>
+        <a class="btn primary" href="./guide#install">Get the extension</a>
         <a class="btn" href="./app">Try it in the browser</a>
       </div>
-      <p class="fine">Free to use, with the source on GitHub. The extension works in Chrome, Edge and Brave and isn't on the
-        Web Store yet, so it installs in developer mode — <a href="#install">steps below</a>. Another browser, or
-        another extension? See the <a href="./guide#without-extension">guide</a>.</p>
-
-      <figure class="shot hero-shot" data-file="hero.png">
-        <img src="./screenshots/hero.png" width="1600" height="1000"
-          alt="Velin as a new tab: a clock, a todo list, a note and bookmarks arranged on a custom background">
-      </figure>
+      <p class="fine">Free to use, with the source on GitHub. The extension works in Chrome, Edge and Brave. Using another browser? The <a href="./guide#without-extension">guide</a> has options.</p>
+      <div class="frame">
+        <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+        <figure class="shot" data-file="hero.png"><img src="./screenshots/hero.png" width="1600" height="1000" alt="Velin as a new tab: a clock, a todo list, a note and bookmarks on a custom background"></figure>
+      </div>
     </section>
 
-    <!-- FEATURES -->
     <section id="features" class="section">
       <h2>What's in it</h2>
+      <div class="feature"><div class="copy"><h3>Widgets you arrange yourself</h3>
+        <p>Clock, bookmarks, todo, notes and a pomodoro timer. Drag a widget by its header, resize it from the corner, and it stays where you left it. The pomodoro keeps running across tabs.</p></div>
+        <figure class="shot" data-file="widgets.png"><img src="./screenshots/widgets.png" width="1600" height="1000" loading="lazy" alt="Edit mode with the toolbar at the bottom and several widgets being arranged"></figure></div>
+      <div class="feature flip"><div class="copy"><h3>Markdown notes</h3>
+        <p>A note widget is a small markdown editor with a live preview: headings, bold and italic, code, links, lists and tables.</p></div>
+        <figure class="shot" data-file="notes.png"><img src="./screenshots/notes.png" width="1600" height="1000" loading="lazy" alt="A note widget showing rendered markdown, including a table"></figure></div>
+      <div class="feature"><div class="copy"><h3>Your own background</h3>
+        <p>Solid colors, gradients, or an image of your own, with brightness and blur sliders.</p></div>
+        <figure class="shot" data-file="backgrounds.png"><img src="./screenshots/backgrounds.png" width="1600" height="1000" loading="lazy" alt="The background panel open, with an image background behind the widgets"></figure></div>
 
-      <div class="feature">
-        <div class="copy">
-          <h3>Widgets you arrange yourself</h3>
-          <p>Clock, bookmarks, todo, notes and a pomodoro timer. Drag a widget by its header, resize it from the corner,
-            and it stays where you left it. The pomodoro keeps running across tabs.</p>
-        </div>
-        <figure class="shot" data-file="widgets.png">
-          <img src="./screenshots/widgets.png" width="1600" height="1000" loading="lazy"
-            alt="Edit mode with the toolbar at the bottom and several widgets being arranged">
-        </figure>
-      </div>
-
-      <div class="feature flip">
-        <div class="copy">
-          <h3>Markdown notes</h3>
-          <p>A note widget is a small markdown editor with a live preview: headings, bold and italic, code, links,
-            lists and tables.</p>
-        </div>
-        <figure class="shot" data-file="notes.png">
-          <img src="./screenshots/notes.png" width="1600" height="1000" loading="lazy"
-            alt="A note widget showing rendered markdown, including a table">
-        </figure>
-      </div>
-
-      <div class="feature">
-        <div class="copy">
-          <h3>Your own background</h3>
-          <p>Solid colors, gradients, or an image of your own, with brightness and blur sliders.</p>
-        </div>
-        <figure class="shot" data-file="backgrounds.png">
-          <img src="./screenshots/backgrounds.png" width="1600" height="1000" loading="lazy"
-            alt="The background panel open, with an image background behind the widgets">
-        </figure>
-      </div>
-
-      <!-- Themes section hidden for now (screenshots: theme-dark/light/glass/bw.png). Uncomment to bring it back.
-      <div class="themes">
-        <div class="copy">
-          <h3>Four themes</h3>
-          <p>Dark, light, glass, and black &amp; white.</p>
-        </div>
-        <div class="theme-grid">
-          <figure class="shot" data-file="theme-dark.png">
-            <img src="./screenshots/theme-dark.png" width="1600" height="1000" loading="lazy" alt="Velin in the dark theme">
-            <figcaption>dark</figcaption>
-          </figure>
-          <figure class="shot" data-file="theme-light.png">
-            <img src="./screenshots/theme-light.png" width="1600" height="1000" loading="lazy" alt="Velin in the light theme">
-            <figcaption>light</figcaption>
-          </figure>
-          <figure class="shot" data-file="theme-glass.png">
-            <img src="./screenshots/theme-glass.png" width="1600" height="1000" loading="lazy" alt="Velin in the glass theme">
-            <figcaption>glass</figcaption>
-          </figure>
-          <figure class="shot" data-file="theme-bw.png">
-            <img src="./screenshots/theme-bw.png" width="1600" height="1000" loading="lazy" alt="Velin in the black and white theme">
-            <figcaption>black &amp; white</figcaption>
-          </figure>
-        </div>
-      </div>
-      -->
+      <!-- Themes section hidden for now (screenshots: theme-dark/light/glass/bw.png). Add a four-up grid of those here to bring it back. -->
 
       <ul class="also">
-        <li><b>View and edit modes</b> Press <kbd>E</kbd> to lock everything in place, or unlock it to rearrange.</li>
-        <li><b>Free-floating text</b> Place text anywhere on the canvas.</li>
-        <li><b>Export and import</b> Save everything to one JSON file and load it back anywhere.</li>
-        <li><b>No build step</b> Four files. Open <code>app.html</code> and it works.</li>
+        <li><b>View and edit modes</b>Press <kbd>E</kbd> to lock everything in place, or unlock it to rearrange.</li>
+        <li><b>Free-floating text</b>Place text anywhere on the canvas.</li>
+        <li><b>Export and import</b>Save everything to one JSON file and load it back anywhere.</li>
+        <li><b>No build step</b>Four files. Open <code>app.html</code> and it works.</li>
       </ul>
     </section>
 
-    <!-- PRIVACY -->
+    <section class="section">
+      <h2>Use it your way</h2>
+      <div class="ways">
+        <a href="./guide#install"><h3>Velin's extension</h3><p>Chrome, Edge and Brave. Velin becomes your new tab and loads from files on your computer.</p><span>Install steps</span></a>
+        <a href="./guide#without-extension"><h3>Another extension</h3><p>Any browser. A new-tab extension or a browser setting sends new tabs to the web version.</p><span>See the options</span></a>
+        <a href="./app"><h3>Just the website</h3><p>No setup at all. Open it when you want it, or bookmark it.</p><span>Open Velin</span></a>
+      </div>
+    </section>
+
     <section class="section narrow">
       <h2>Everything stays in your browser</h2>
-      <p>Widgets, notes, bookmarks and background images are stored in your browser's IndexedDB. There's no account and
-        no Velin server.</p>
-      <p>Two things do reach the network: fonts load from Google Fonts, and bookmark icons are looked up through
-        DuckDuckGo's icon service (then the site's own favicon as a fallback).</p>
+      <p>Widgets, notes, bookmarks and background images are stored in your browser's IndexedDB. There's no account and no Velin server.</p>
+      <p>Two things do reach the network: fonts load from Google Fonts, and bookmark icons are looked up through DuckDuckGo's icon service (then the site's own favicon as a fallback).</p>
     </section>
+  </main>
 
-    <!-- INSTALL -->
-    <section id="install" class="section narrow">
-      <h2>Install the extension</h2>
-      <p>For Chrome, Edge and Brave. Velin isn't on the Web Store yet, so you load it yourself — it takes about a
-        minute.</p>
-
-      <ol class="steps">
-        <li>
-          <b>Download and unzip.</b>
-          Get <a href="https://github.com/Tahsin2155/velin/releases/latest/download/velin-extension.zip">velin-extension.zip</a>
-          and unzip it somewhere permanent. The browser loads Velin from that folder, so don't delete it.
-        </li>
-        <li>
-          <b>Open your browser's extensions page.</b>
-          Browsers block links to it, so copy the address and paste it in a new tab.
-          <span class="copyrow">
-            <button class="copy" data-copy="chrome://extensions">chrome://extensions</button>
-            <button class="copy" data-copy="edge://extensions">edge://extensions</button>
-            <button class="copy" data-copy="brave://extensions">brave://extensions</button>
-          </span>
-        </li>
-        <li><b>Turn on Developer mode</b> (the switch at the top right).</li>
-        <li><b>Click Load unpacked</b> and choose the unzipped folder.</li>
-        <li><b>Open a new tab.</b> That's Velin.</li>
-      </ol>
-
-      <div class="notes">
-        <p><b>Developer-mode warning.</b> Because it's loaded this way, your browser may show a notice about
-          developer-mode extensions. That's expected until Velin is on the Web Store.</p>
-        <p><b>Your data is separate from the website.</b> The extension and the web version
-          keep their own storage. To move your setup between them, use <i>⬇ export</i> in one
-          and <i>⬆ import</i> in the other.</p>
-        <p><b>Updating.</b> Download the new zip, replace the files in the same folder, then press the reload icon on
-          Velin's card in the extensions page. Your data stays.</p>
-        <p><b>Removing.</b> Removing the extension deletes its data, so export first.</p>
-        <p><b>Firefox.</b> Not supported as an extension yet. The web version works there.</p>
+  <footer id="contact" class="site-footer">
+    <div class="f-grid has-form">
+      <div class="f-brand">
+        <a class="brand" href="./">Velin</a>
+        <p>A start page for your new tab. Widgets, notes, bookmarks and your own background, kept in your browser.</p>
       </div>
-
-      <p class="alt">Not on Chrome, Edge or Brave, or you'd rather use a different extension? You can still get Velin on
-        every new tab — see <a href="./guide#without-extension">using Velin without its own extension</a>.</p>
-    </section>
-
-    <!-- CONTACT -->
-    <section id="contact" class="section narrow">
-      <h2>Contact</h2>
-      <p>Found a bug, have an idea, or just want to say hi? Send me a message.</p>
-
-      <form id="contact-form" class="contact" action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
-        <label>Name <span class="opt">(optional)</span>
-          <input type="text" name="name" autocomplete="name" maxlength="100">
-        </label>
-        <label>Email
-          <input type="email" name="email" autocomplete="email" required maxlength="200">
-        </label>
-        <label>Message
-          <textarea name="message" rows="6" required maxlength="5000"></textarea>
-        </label>
+      <nav class="f-col" aria-label="Velin">
+        <h4>Velin</h4>
+        <a href="./guide#install">Get the extension</a>
+        <a href="./app">Open the web version</a>
+        <a href="./guide">Guide</a>
+      </nav>
+      <nav class="f-col" aria-label="Project">
+        <h4>Project</h4>
+        <a href="https://github.com/Tahsin2155/velin">Source on GitHub</a>
+        <a href="https://github.com/Tahsin2155/velin/releases">Releases</a>
+        <a href="https://github.com/Tahsin2155/velin/issues">Report an issue</a>
+        <a href="https://tahsin2155.github.io">Made by Tahsin</a>
+      </nav>
+      <form id="contact-form" class="contact" action="https://formspree.io/f/xyeewrbp" method="POST">
+        <h4>Send me a message</h4>
+        <p class="f-note">Bug, idea, or just hello. Sent through <a href="https://formspree.io">Formspree</a> and emailed to me; the app itself never sends your data anywhere.</p>
+        <label><span>Name <span class="opt">(optional)</span></span><input type="text" name="name" autocomplete="name" maxlength="100"></label>
+        <label>Email<input type="email" name="email" autocomplete="email" required maxlength="200"></label>
+        <label>Message<textarea name="message" rows="4" required maxlength="5000"></textarea></label>
         <input type="hidden" name="_subject" value="Velin — message from the website">
-        <!-- honeypot: hidden from people, bots tend to fill it -->
         <input type="text" name="_gotcha" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
         <button class="btn primary" type="submit">Send message</button>
         <p id="contact-status" role="status" aria-live="polite"></p>
       </form>
-      <p class="fine left">Messages are sent through <a href="https://formspree.io">Formspree</a> and emailed to me.
-        The Velin app itself never sends your data anywhere.</p>
-    </section>
-
-  </main>
-
-  <footer>
-    <p>Velin · made by <a href="https://tahsin2155.github.io">Tahsin</a> · built with help from AI (Claude)</p>
-    <p><a href="https://github.com/Tahsin2155/velin">source on GitHub</a> · <a href="./guide">guide</a> ·
-      <a href="#contact">contact</a></p>
+    </div>
+    <div class="f-bar"><span>Built with help from AI (Claude).</span><a href="#top">Back to top</a></div>
   </footer>
-
   <script src="./landing.js"></script>
 </body>
-
 </html>
