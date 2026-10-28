@@ -1,13 +1,18 @@
 # Velin
 
-A new-tab start page. Widgets, notes, bookmarks, backgrounds — all in four files, no build step.
+A new-tab start page. Widgets, notes, bookmarks, backgrounds — the app is four files, no build step.
 
-Open `index.html` in a browser and it works.
+- **Website:** https://newvelintab.netlify.app
+- **Guide** (install, use, troubleshooting): https://newvelintab.netlify.app/guide
+- **Web version:** https://newvelintab.netlify.app/app
+- **Browser extension** (Chrome, Edge, Brave): download `velin-extension.zip` from the [latest release](https://github.com/Tahsin2155/velin/releases/latest) and follow the guide's install steps.
+
+To run it locally, open `app.html` in a browser and it works.
 
 ## Files
 
 ```
-index.html   page shell, toolbar, panels
+app.html     page shell, toolbar, panels
 storage.js   persistence engine (IndexedDB)
 script.js    everything else
 styles.css   themes and layout
@@ -15,7 +20,24 @@ styles.css   themes and layout
 
 See [user-guide.md](user-guide.md) for the full usage guide, including widgets, background settings, keyboard shortcuts, and export/import details.
 
-There's no `src/`, no bundler config, no `package.json`. `storage.js` must load before `script.js` (it already does, in `index.html`). If you want to change something, open `script.js` and find the section header (the code is split into commented blocks like `WIDGET ENGINE`, `POMODORO`, `FREE TEXT`).
+The rest of the repo is the website and the extension packaging (see below), not the app itself.
+
+There's no `src/`, no bundler config, no `package.json`. `storage.js` must load before `script.js` (it already does, in `app.html`). If you want to change something, open `script.js` and find the section header (the code is split into commented blocks like `WIDGET ENGINE`, `POMODORO`, `FREE TEXT`).
+
+## Website and extension
+
+```
+index.html, guide.html, landing.css, landing.js   the website (home page and guide)
+_redirects                                        Netlify: /app and /guide without .html
+screenshots/                                      images used by the website
+manifest.json, icons/                             the Chrome/Edge/Brave extension (Manifest V3)
+build_extension.py                                builds dist/velin-extension.zip
+.github/workflows/release-extension.yml           builds and publishes the zip when a v* tag is pushed
+```
+
+The extension is the same app, not a copy: its manifest overrides the new tab with `app.html`, and `build_extension.py` zips only the files the extension needs. The website is hosted on Netlify. See [RELEASING.md](RELEASING.md) for how a release is made.
+
+Extension pages can't run inline scripts or inline event handlers (`onclick=...`, `onload=...`), so keep `app.html` free of them.
 
 ## Widgets
 
@@ -24,7 +46,7 @@ Click a toolbar button to add one. Drag from the header, resize from the bottom-
 - **Clock** — click the face to switch digital/analog
 - **Bookmark** — a saved link with its favicon, or a fallback letter if the favicon lookup fails
 - **Todo** — check items off, clear completed ones
-- **Note** — markdown editor with a live preview toggle. Supports headings, bold/italic/code, links, bullet lists, horizontal rules, and GFM-style pipe tables (`| a | b |` with a `|---|---|` separator row, including column alignment via `:---`, `:---:`, `---:`)
+- **Note** — markdown editor with a live preview toggle. Supports headings, bold/italic/code, fenced code blocks, links, bullet/numbered/task lists, quotes, horizontal rules, and GFM-style pipe tables (`| a | b |` with a `|---|---|` separator row, including column alignment via `:---`, `:---:`, `---:`)
 - **Pomodoro** — focus/break timer; state is shared across tabs, so starting it in one tab keeps it running if you check another
 
 Press `E` to toggle view mode, which hides all the editing chrome for a clean look.
@@ -78,7 +100,20 @@ Blur can be forced on or off from the toolbar, or left on "auto," which guesses 
 A few things that'll bite you if you're not careful:
 
 - Widget cleanup (`_cleanups` array per widget) removes timers and listeners on close. If you add a widget type with its own interval or global listener, register a cleanup for it or it'll leak.
+- Only touch the pomodoro lock while the timer is actually running. Acquiring and releasing it on every idle tick fires a `storage` event in every other tab, whose own tick does the same, and two tabs end up freezing each other.
 - The pomodoro's cross-tab lock (`VelinStore.readLock`/`writeLock`/`releaseLock`, backed by `localStorage`) is good enough for a timer, not a real mutex. Two tabs racing to acquire it at the same instant is possible in theory; the cost of losing that race is just a UI hiccup, not lost data.
 - Every entity type (widget, bookmark, ft-note) needs a stable `id` before it's handed to `VelinStore.saveX(...)` — that `id` is the database key. Widgets already carry one; if you add a new persisted entity type, give it an id up front.
 - `VelinStore` debounces writes per-key internally, so it's safe to call `saveWidget`/`saveFtNote`/etc. on every keystroke — you don't need to add your own debouncing on top.
 - `importAll` wipes the normalized stores before repopulating them, and filters out `__proto__`/`constructor`/`prototype` from imported meta keys as a defensive measure. It doesn't do deep recursive merging the way the old `dMerge` did, since each entity is now a flat, independent record rather than a nested blob.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how, and for the terms contributions are accepted under.
+
+## License
+
+Velin has no open-source license: the source is public, but it isn't open source.
+
+Copyright © 2026 [Tahsin](https://tahsin2155.github.io). All rights reserved.
+
+You're welcome to use the app, read the source, and contribute to it (see [CONTRIBUTING.md](CONTRIBUTING.md)). Copying the code into other projects, building your own version from it, or redistributing it isn't permitted without permission.

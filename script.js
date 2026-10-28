@@ -26,9 +26,11 @@ function dMerge(t, s, _depth = 0) {
 }
 
 // ══════════════════════════════
-//  NOTIFICATION SUPPORT
+//  NOTIFICATION & AUDIO SUPPORT
 // ══════════════════════════════
-let notificationEnabled = false;
+// Permission is only *requested* from a user gesture (Pomodoro start);
+// at load we just pick up a previously granted permission.
+let notificationEnabled = ('Notification' in window) && Notification.permission === 'granted';
 
 function requestNotificationPermission() {
   if (!('Notification' in window)) return;
@@ -37,7 +39,7 @@ function requestNotificationPermission() {
   } else if (Notification.permission !== 'denied') {
     Notification.requestPermission().then(perm => {
       notificationEnabled = (perm === 'granted');
-    });
+    }).catch(() => { });
   }
 }
 
@@ -47,7 +49,31 @@ function showNotification(title, options = {}) {
   }
 }
 
-requestNotificationPermission();
+function playPomoChime(completedMode) {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === 'suspended') ctx.resume().catch(() => { });
+    // Ascending chime for focus completion; gentle descending pair for break completion
+    const freqs = completedMode === 'focus' ? [523.25, 659.25, 783.99] : [659.25, 523.25];
+    freqs.forEach((f, idx) => {
+      const t0 = ctx.currentTime + idx * 0.14;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, t0);
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.12, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.46);
+    });
+    setTimeout(() => ctx.close().catch(() => { }), 1500);
+  } catch (e) { /* ignore audio autoplay restrictions */ }
+}
 
 let S = JSON.parse(JSON.stringify(DEF));
 
@@ -95,6 +121,127 @@ let _appBooted = false;
 let _currentBgObjectUrl = null; // object URL for the active bg image Blob; revoked when replaced
 
 // Hydrate persisted state from normalized stores and render the app once storage is ready.
+// ══════════════════════════════
+//  CROSS-TAB SYNC
+//  Another tab wrote something (VelinStore.onRemoteChange). Reconcile this
+//  tab with the store *in place*: only widgets whose content changed are
+//  rebuilt; position / size / layer changes are applied without a rebuild
+//  (so notes keep scroll + focus), and Pomodoro widgets keep syncing
+//  themselves via their own lock/version logic.
+// ══════════════════════════════
+let _remoteSyncTimer = null;
+let _remoteSyncRunning = false;
+const _recentlyClosed = new Map(); // id -> closedAt, so a just-deleted widget isn't resurrected by a stale read
+const WIDGET_LAYOUT_KEYS = ['x', 'y', 'w', 'h', 'z', 'rot'];
+const WIDGET_SELF_SYNCED_KEYS = ['pomoState', 'pomoSessions'];
+
+function widgetContentSig(cfg) {
+  const c = { ...cfg };
+  WIDGET_LAYOUT_KEYS.concat(WIDGET_SELF_SYNCED_KEYS).forEach(k => delete c[k]);
+  return JSON.stringify(c);
+}
+
+function listSig(arr) {
+  return JSON.stringify((Array.isArray(arr) ? arr : []).slice().sort((a, b) => String(a && a.id).localeCompare(String(b && b.id))));
+}
+
+function removeWidgetLocal(id) {
+  const ref = wRefs[id]; if (!ref) return;
+  if (Array.isArray(ref._cleanups)) ref._cleanups.forEach(fn => { try { fn(); } catch (e) { } });
+  ref.el.remove();
+  delete wRefs[id];
+}
+
+function applyRemoteLayout(ref, remote) {
+  const { el, cfg } = ref;
+  const sizeChanged = cfg.w !== remote.w || cfg.h !== remote.h;
+  WIDGET_LAYOUT_KEYS.forEach(k => { if (remote[k] !== undefined) cfg[k] = remote[k]; });
+  el.style.left = clampX(cfg.x ?? 80) + 'px';
+  el.style.top = clampY(cfg.y ?? 80) + 'px';
+  if (cfg.w) el.style.width = cfg.w + 'px';
+  el.style.height = cfg.h ? cfg.h + 'px' : '';
+  el.style.transform = cfg.rot ? `rotate(${cfg.rot}deg)` : '';
+  if (typeof cfg.z === 'number') { el.style.zIndex = cfg.z; if (cfg.z > zTop) zTop = Math.min(Z_MAX, cfg.z); }
+  if (sizeChanged && cfg.type === 'clock' && typeof updateClockSize === 'function') updateClockSize(cfg.id);
+}
+
+async function reconcileFromStore() {
+  // Persist this tab's own pending edits first so reading the store can't discard them.
+  await VelinStore.flushAll();
+  const [meta, widgets, bookmarks, ftNotes] = await Promise.all([
+    VelinStore.getAllMeta(),
+    VelinStore.getAllWidgets(),
+    VelinStore.getAllBookmarks(),
+    VelinStore.getAllFtNotes()
+  ]);
+
+  const prevGuard = _saveGuard;
+  _saveGuard = true; // applying remote state must not write it straight back (ping-pong)
+  try {
+    if (meta.theme && meta.theme !== S.theme) applyTheme(meta.theme);
+    if (meta.blurMode && meta.blurMode !== S.blurMode) { S.blurMode = meta.blurMode; applyBlurMode(meta.blurMode); }
+    if (typeof meta.viewMode === 'boolean' && meta.viewMode !== viewMode) { viewMode = meta.viewMode; applyMode(); }
+    if (meta.bg && JSON.stringify(meta.bg) !== JSON.stringify(S.bg)) {
+      S.bg = meta.bg;
+      await applyBg();
+      syncBgPanelUI();
+    }
+  } finally {
+    _saveGuard = prevGuard;
+  }
+
+  if (listSig(bookmarks) !== listSig(S.bookmarks)) {
+    S.bookmarks = Array.isArray(bookmarks) ? bookmarks : [];
+    renderBmSaved();
+  }
+
+  if (listSig(ftNotes) !== listSig(S.ftNotes)) {
+    S.ftNotes = Array.isArray(ftNotes) ? ftNotes : [];
+    renderFT();
+  }
+
+  const now = Date.now();
+  _recentlyClosed.forEach((t, id) => { if (now - t > 5000) _recentlyClosed.delete(id); });
+
+  const remoteList = (Array.isArray(widgets) ? widgets : []).filter(w => w && w.id).slice(-50);
+  const remoteIds = new Set(remoteList.map(w => w.id));
+  Object.keys(wRefs).forEach(id => { if (!remoteIds.has(id)) removeWidgetLocal(id); });
+  remoteList.forEach(remote => {
+    if (_recentlyClosed.has(remote.id)) return;
+    const ref = wRefs[remote.id];
+    if (!ref) { makeWidget(remote); return; }
+    if (widgetContentSig(ref.cfg) !== widgetContentSig(remote)) {
+      removeWidgetLocal(remote.id);
+      makeWidget(remote);
+    } else {
+      applyRemoteLayout(ref, remote);
+    }
+  });
+  S.widgets = Object.values(wRefs).map(r => r.cfg);
+}
+
+function setupCrossTabSync() {
+  const schedule = delay => {
+    if (_remoteSyncTimer) clearTimeout(_remoteSyncTimer);
+    _remoteSyncTimer = setTimeout(run, delay);
+  };
+  const run = async () => {
+    const active = document.activeElement;
+    const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+    const isDragging = document.querySelector('.wp.dragging, .wp.resizing');
+    if (_remoteSyncRunning || isTyping || isDragging) { schedule(1000); return; } // try again shortly, don't drop the update
+    _remoteSyncRunning = true;
+    try {
+      await reconcileFromStore();
+    } catch (e) {
+      console.warn('Cross-tab sync failed:', e);
+    } finally {
+      _remoteSyncRunning = false;
+    }
+  };
+  VelinStore.onRemoteChange(() => schedule(250));
+}
+
 async function bootApp() {
   if (_appBooted) return;
   _appBooted = true;
@@ -142,9 +289,15 @@ async function bootApp() {
   applyBlurMode(S.blurMode || 'auto');
   applyMode();
   await applyBg();
+  syncBgPanelUI();
   renderBmSaved();
+  // Start the layer counter above every persisted widget z so un-layered
+  // (legacy) widgets and free-text notes stack on top instead of colliding.
+  S.widgets.forEach(w => { if (typeof w.z === 'number' && w.z >= Z_BASE && w.z <= Z_MAX && w.z > zTop) zTop = w.z; });
   renderFT();
   S.widgets.forEach(cfg => makeWidget(cfg));
+
+  setupCrossTabSync();
 
   checkStorageQuota();
   setInterval(checkStorageQuota, 5 * 60 * 1000); // recheck every 5 min while the tab is open
@@ -177,6 +330,19 @@ function showImgWarn() {
 
 function snap(v) { return Math.round(v / 20) * 20; }
 function pad(n) { return String(n).padStart(2, '0'); }
+function uid(prefix = 'w') {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+// Keep at least 80px of width and 48px of height inside the visible viewport
+function clampX(x, minVisible = 80) {
+  const maxX = Math.max(0, window.innerWidth - minVisible);
+  return Math.min(Math.max(0, x), maxX);
+}
+function clampY(y, minVisible = 48) {
+  const maxY = Math.max(0, window.innerHeight - minVisible);
+  return Math.min(Math.max(0, y), maxY);
+}
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -199,7 +365,7 @@ function getHostname(url) {
 
 // Markdown renderer
 function renderMD(md) {
-  // Convert a tiny markdown subset to sanitized HTML for note previews.
+  // Convert a small markdown subset to sanitized HTML for note previews.
   function sanitizeHref(href) {
     try {
       const url = new URL(href, location.href);
@@ -207,7 +373,15 @@ function renderMD(md) {
     } catch (e) { }
     return '#';
   }
-  let out = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let out = (md || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Pull fenced code blocks out first so their contents aren't parsed as headings/lists/etc.
+  const codeBlocks = [];
+  out = out.replace(/```([\s\S]*?)```/g, (_, code) => {
+    const idx = codeBlocks.push(`<pre><code>${code.replace(/^\n+|\n+$/g, '')}</code></pre>`) - 1;
+    return `@@CODEBLOCK_${idx}@@`;
+  });
+
   out = out
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
@@ -217,7 +391,7 @@ function renderMD(md) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`(.+?)`/g, '<code>$1</code>')
-    .replace(/\[(.+?)\]\((.+?)\)/g, (_, text, href) => `<a href="${sanitizeHref(href)}">${text}</a>`);
+    .replace(/\[(.+?)\]\((.+?)\)/g, (_, text, href) => `<a href="${sanitizeHref(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`);
 
   // ── TABLES ──
   // Parse simple GFM pipe tables as one block before the paragraph fallback.
@@ -239,12 +413,13 @@ function renderMD(md) {
     return '';
   }
 
+  const BLOCK_START = /^<[hup\/]|^<hr|^<ul|^<ol|^<li|^<table|^<blockquote|^@@CODEBLOCK_/;
   const rawLines = out.split('\n');
   const lines = [];
   let i = 0;
   while (i < rawLines.length) {
     const line = rawLines[i], next = rawLines[i + 1];
-    const looksLikeBlockTag = value => /^<[hup\/]|^<hr|^<ul|^<li/.test(value);
+    const looksLikeBlockTag = value => /^<[hup\/]|^<hr|^<ul|^<ol|^<li|^<blockquote|^@@CODEBLOCK_/.test(value);
     if (line !== undefined && next !== undefined && /\|/.test(line) && isSeparatorRow(next) && !looksLikeBlockTag(line)) {
       const headerCells = splitCells(line);
       const aligns = splitCells(next).map(alignFromSeparatorCell);
@@ -272,24 +447,42 @@ function renderMD(md) {
       i++;
     }
   }
+
   const result = [];
-  let inList = false;
+  let listType = null; // 'ul' | 'ol' | null
+  const closeList = () => {
+    if (listType) { result.push(`</${listType}>`); listType = null; }
+  };
+
   for (const line of lines) {
-    const liMatch = line.match(/^- (.+)$/);
-    if (liMatch) {
-      if (!inList) { result.push('<ul>'); inList = true; }
-      result.push('<li>' + liMatch[1] + '</li>');
+    const ulMatch = line.match(/^- (.+)$/);
+    const olMatch = line.match(/^\d+\.\s+(.+)$/);
+    const bqMatch = line.match(/^&gt;\s*(.+)$/);
+
+    if (ulMatch) {
+      if (listType !== 'ul') { closeList(); result.push('<ul>'); listType = 'ul'; }
+      const itemText = ulMatch[1]
+        .replace(/^\[ \]\s+/, '☐ ')
+        .replace(/^\[[xX]\]\s+/, '☑ ');
+      result.push('<li>' + itemText + '</li>');
+    } else if (olMatch) {
+      if (listType !== 'ol') { closeList(); result.push('<ol>'); listType = 'ol'; }
+      result.push('<li>' + olMatch[1] + '</li>');
+    } else if (bqMatch) {
+      closeList();
+      result.push('<blockquote>' + bqMatch[1] + '</blockquote>');
     } else {
-      if (inList) { result.push('</ul>'); inList = false; }
-      if (line && !/^<[hup\/]|^<hr|^<ul|^<li|^<table/.test(line)) {
+      closeList();
+      if (line && !BLOCK_START.test(line)) {
         result.push('<p>' + line + '</p>');
       } else {
         result.push(line);
       }
     }
   }
-  if (inList) result.push('</ul>');
-  return result.join('\n');
+  closeList();
+
+  return result.join('\n').replace(/@@CODEBLOCK_(\d+)@@/g, (_, idx) => codeBlocks[+idx] || '');
 }
 
 // ══════════════════════════════
@@ -372,6 +565,30 @@ applyBlurMode(S.blurMode || 'auto');
 // ══════════════════════════════
 let zTop = 10;
 const wRefs = {};
+
+const Z_BASE = 10;
+// Stays below .wp.dragging / .wp.resizing (z-index: 9999 !important in styles.css).
+const Z_MAX = 9000;
+
+function rebalanceZIndexes() {
+  const items = [
+    ...Object.values(wRefs).map(r => ({ el: r.el, cfg: r.cfg })),
+    ...Array.from(document.querySelectorAll('.ft-wrapper')).map(el => ({ el, cfg: null }))
+  ].sort((a, b) => (Number(a.el.style.zIndex) || Z_BASE) - (Number(b.el.style.zIndex) || Z_BASE));
+
+  zTop = Z_BASE;
+  items.forEach(item => {
+    zTop = Math.min(Z_MAX, zTop + 1);
+    item.el.style.zIndex = zTop;
+    if (item.cfg) item.cfg.z = zTop;
+  });
+  saveWidgets(); // persist the renumbered layering for every widget
+}
+
+function nextZIndex() {
+  if (zTop >= Z_MAX - 1) rebalanceZIndexes();
+  return Math.min(Z_MAX, ++zTop);
+}
 let viewMode = S.viewMode || false;
 
 function ensureCleanups(id) {
@@ -395,9 +612,10 @@ document.getElementById('mode-toggle').addEventListener('click', () => { viewMod
 const _blurBtn = document.getElementById('blur-toggle-btn');
 if (_blurBtn) _blurBtn.addEventListener('click', cycleBlurMode);
 document.addEventListener('keydown', e => {
-  if (e.key === 'e' && !e.ctrlKey && !e.metaKey &&
-    document.activeElement.tagName !== 'INPUT' &&
-    document.activeElement.tagName !== 'TEXTAREA') {
+  const active = document.activeElement;
+  const tag = active ? active.tagName : '';
+  const isTextual = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (active && active.isContentEditable);
+  if ((e.key || '').toLowerCase() === 'e' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !isTextual) {
     viewMode = !viewMode; applyMode();
   }
 });
@@ -450,6 +668,45 @@ async function applyBg() {
 
 function releaseCurrentBgObjectUrl() {
   if (_currentBgObjectUrl) { URL.revokeObjectURL(_currentBgObjectUrl); _currentBgObjectUrl = null; }
+}
+
+// Make the #bg-panel tabs / swatches / sliders reflect S.bg (they're otherwise
+// stuck on their HTML defaults after a reload or a cross-tab change).
+function syncBgPanelUI() {
+  const bg = S.bg || { type: 'solid', value: '#0d0d0f' };
+  const type = bg.type || 'solid';
+
+  document.querySelectorAll('.bg-tab').forEach(t => t.classList.toggle('active', t.dataset.bgtab === type));
+  ['solid', 'gradient', 'image'].forEach(n => {
+    const panel = document.getElementById('bg-' + n + '-panel');
+    if (panel) panel.classList.toggle('show', n === type);
+  });
+
+  if (type === 'solid') {
+    const val = (bg.value || '#0d0d0f').toLowerCase();
+    document.querySelectorAll('.color-swatch').forEach(sw => {
+      sw.classList.toggle('active', (sw.dataset.color || '').toLowerCase() === val);
+    });
+    const picker = document.getElementById('solid-color-picker');
+    if (picker && /^#[0-9a-f]{6}$/i.test(val)) picker.value = val;
+  } else if (type === 'gradient') {
+    document.querySelectorAll('.grad-preset').forEach(gp => {
+      gp.classList.toggle('active', gp.dataset.grad === bg.value);
+    });
+  }
+
+  imgBrightness = typeof bg.brightness === 'number' ? bg.brightness : 100;
+  imgBlur = typeof bg.blur === 'number' ? bg.blur : 0;
+
+  const bSlider = document.getElementById('img-brightness');
+  const bVal = document.getElementById('brightness-val');
+  if (bSlider) bSlider.value = imgBrightness;
+  if (bVal) bVal.textContent = imgBrightness + '%';
+
+  const blSlider = document.getElementById('img-blur');
+  const blVal = document.getElementById('blur-val');
+  if (blSlider) blSlider.value = imgBlur;
+  if (blVal) blVal.textContent = imgBlur + 'px';
 }
 
 const bgPanel = document.getElementById('bg-panel');
@@ -653,11 +910,19 @@ async function loadPersistedFaviconCache() {
 const canvas = document.getElementById('canvas');
 
 function makeWidget(cfg) {
-  const id = cfg.id || ('w' + Date.now()); cfg.id = id;
+  const id = cfg.id || uid('w'); cfg.id = id;
   const el = document.createElement('div');
   el.className = 'wp'; el.id = 'wp-' + id;
   el.dataset.type = cfg.type;
-  el.style.cssText = `left:${cfg.x || 80}px;top:${cfg.y || 80}px;width:${cfg.w || 280}px;${cfg.h ? 'height:' + cfg.h + 'px;' : ''}z-index:${++zTop};`;
+
+  const initX = clampX(cfg.x ?? 80);
+  const initY = clampY(cfg.y ?? 80);
+  const hasZ = typeof cfg.z === 'number' && cfg.z >= Z_BASE && cfg.z <= Z_MAX;
+  const initZ = hasZ ? cfg.z : nextZIndex();
+  cfg.z = initZ;
+  if (initZ > zTop) zTop = initZ;
+
+  el.style.cssText = `left:${initX}px;top:${initY}px;width:${cfg.w || 280}px;${cfg.h ? 'height:' + cfg.h + 'px;' : ''}z-index:${initZ};`;
   if (cfg.rot) el.style.transform = `rotate(${cfg.rot}deg)`;
 
   const hdr = document.createElement('div'); hdr.className = 'wp-header';
@@ -678,7 +943,15 @@ function makeWidget(cfg) {
   makeDraggable(el, hdr, id);
   makeResizable(el, rh, id);
 
-  el.addEventListener('mousedown', () => { el.style.zIndex = ++zTop; });
+  el.addEventListener('mousedown', e => {
+    if (e.target.closest('.wp-close')) return; // widget is about to be deleted — don't write it back
+    if (Number(el.style.zIndex) !== zTop) {
+      const nz = nextZIndex();
+      el.style.zIndex = nz;
+      cfg.z = nz;
+      saveWidgets(id);
+    }
+  });
   return el;
 }
 
@@ -689,8 +962,8 @@ function makeDraggable(el, handle, id) {
   let ox = 0, oy = 0;
 
   const onMove = e => {
-    el.style.left = snap(e.clientX - ox) + 'px';
-    el.style.top = snap(e.clientY - oy) + 'px';
+    el.style.left = clampX(snap(e.clientX - ox)) + 'px';
+    el.style.top = clampY(snap(e.clientY - oy)) + 'px';
   };
 
   const onUp = () => {
@@ -949,6 +1222,17 @@ function buildBookmarkWidget(body, cfg, id) {
   const normalizedUrl = normalizeHttpUrl(cfg.bmUrl);
   const a = document.createElement('a'); a.className = 'bm-widget-inner';
   a.href = normalizedUrl || '#';
+  a.title = cfg.bmName || cfg.bmUrl || '';
+
+  // Edit mode: a single click must not navigate away (it's how you select/arrange
+  // the widget). Double-click still opens the link. View mode behaves normally,
+  // except right after a drag.
+  a.addEventListener('click', e => {
+    if (!viewMode || _dragMoved) e.preventDefault();
+  });
+  a.addEventListener('dblclick', () => {
+    if (!viewMode && normalizedUrl) window.location.href = normalizedUrl;
+  });
 
   const favWrap = document.createElement('div'); favWrap.className = 'bm-favicon-wrap';
   const fav = document.createElement('img'); fav.className = 'bm-widget-favicon';
@@ -1038,11 +1322,7 @@ function buildNote(body, cfg, id) {
 
   tog.addEventListener('click', () => {
     editMode = !editMode;
-    ta.style.display = editMode ? '' : 'none';
-    toolbar.querySelectorAll('.note-fmt-btn:not(.note-toggle-btn)').forEach(b => b.style.display = editMode ? '' : 'none');
-    prev.style.display = editMode ? 'none' : 'block';
-    tog.textContent = editMode ? 'preview' : 'edit';
-    if (!editMode) prev.innerHTML = renderMD(cfg.noteContent);
+    syncViewMode();
   });
 
   function wrap(a, b) {
@@ -1067,11 +1347,14 @@ function buildNote(body, cfg, id) {
   // FIX: Use single custom event from applyMode() instead of a MutationObserver
   // per note widget. Multiple open notes previously each observed document.body.
   function syncViewMode() {
-    if (viewMode) {
-      prev.innerHTML = renderMD(cfg.noteContent);
-      prev.style.display = 'block';
-      ta.style.display = 'none';
-    }
+    const showPreview = viewMode || !editMode;
+    ta.style.display = showPreview ? 'none' : '';
+    toolbar.querySelectorAll('.note-fmt-btn:not(.note-toggle-btn)').forEach(b => {
+      b.style.display = showPreview ? 'none' : '';
+    });
+    prev.style.display = showPreview ? 'block' : 'none';
+    tog.textContent = editMode ? 'preview' : 'edit';
+    if (showPreview) prev.innerHTML = renderMD(cfg.noteContent);
   }
 
   const onModeChange = () => syncViewMode();
@@ -1202,13 +1485,17 @@ function buildPomodoro(body, cfg, id) {
 
     _syncInFlight = (async () => {
       try {
-        const remoteCfg = await VelinStore.getAllWidgets().then(all => all.find(w => w && w.id === cfg.id));
+        const remoteCfg = await VelinStore.getWidget(cfg.id);
         if (!remoteCfg || !remoteCfg.pomoState) return;
         const remoteState = normalizeState(remoteCfg.pomoState);
         if (remoteState.version === state.version) {
           state = mergeEqualVersion(remoteState, state);
         } else if (isRemoteFresher(remoteState, state)) {
           state = remoteState;
+          // Keep the in-memory cfg current too: z-order saves write the whole
+          // cfg, and a stale pomoState here would overwrite the newer remote one.
+          cfg.pomoState = remoteCfg.pomoState;
+          cfg.pomoSessions = remoteCfg.pomoSessions;
         }
       } catch (e) { /* non-fatal — next tick will retry */ }
     })();
@@ -1242,9 +1529,13 @@ function buildPomodoro(body, cfg, id) {
   function setRunningForCurrentMode(nowMs, durationMs) { state.status = 'running'; state.startedAt = nowMs; state.endsAt = nowMs + durationMs; }
 
   function applyCatchUp() {
+    // Nothing to catch up on unless the timer is running. Checking this *before*
+    // touching the lock matters: acquiring then releasing the lock on every idle
+    // tick fires a storage event in every other tab, whose own tick does the same,
+    // and two tabs end up re-triggering each other until both freeze.
+    if (state.status !== 'running' || typeof state.endsAt !== 'number') return false;
     if (!isLockOwnedByMe() && !tryAcquireLock(false)) return false;
     renewLockIfNeeded();
-    if (state.status !== 'running' || typeof state.endsAt !== 'number') return false;
     const now = Date.now();
     let changed = false;
     while (state.status === 'running' && typeof state.endsAt === 'number' && now >= state.endsAt) {
@@ -1265,6 +1556,7 @@ function buildPomodoro(body, cfg, id) {
   }
 
   function notifySessionComplete(completedMode) {
+    playPomoChime(completedMode);
     const titles = {
       focus: '🎯 Focus session done!',
       shortBreak: '☕ Short break over',
@@ -1321,6 +1613,7 @@ function buildPomodoro(body, cfg, id) {
   }
 
   document.getElementById('ps-' + id).addEventListener('click', async () => {
+    requestNotificationPermission(); // user gesture — browsers allow the prompt here
     const now = Date.now();
     tryAcquireLock(true); await syncStateFromStorage(true); applyCatchUp();
     if (state.status === 'running') {
@@ -1390,6 +1683,7 @@ function closeWidget(id) {
   if (Array.isArray(ref._cleanups)) ref._cleanups.forEach(fn => { try { fn(); } catch (e) { } });
   ref.el.remove();
   delete wRefs[id];
+  _recentlyClosed.set(id, Date.now());
   S.widgets = S.widgets.filter(w => w.id !== id);
   VelinStore.deleteWidget(id);
 }
@@ -1408,7 +1702,7 @@ const defSizes = { clock: { w: 280, h: 160 }, bookmark: { w: 100, h: 100 }, todo
 
 document.querySelectorAll('[data-add]').forEach(btn => btn.addEventListener('click', () => {
   const type = btn.dataset.add, sz = defSizes[type];
-  const cfg = { id: 'w' + Date.now(), type, x: snap(80 + Math.random() * 200), y: snap(80 + Math.random() * 100), w: sz.w, h: sz.h };
+  const cfg = { id: uid('w'), type, x: snap(80 + Math.random() * 200), y: snap(80 + Math.random() * 100), w: sz.w, h: sz.h };
   S.widgets.push(cfg); makeWidget(cfg); saveWidgets(cfg.id);
 }));
 
@@ -1450,7 +1744,7 @@ function renderBmSaved() {
 
     item.addEventListener('click', () => {
       const sz = defSizes.bookmark;
-      const cfg = { id: 'w' + Date.now(), type: 'bookmark', bmUrl: bm.url, bmName: bm.name, x: snap(100 + Math.random() * 300), y: snap(100 + Math.random() * 200), w: sz.w, h: sz.h };
+      const cfg = { id: uid('w'), type: 'bookmark', bmUrl: bm.url, bmName: bm.name, x: snap(100 + Math.random() * 300), y: snap(100 + Math.random() * 200), w: sz.w, h: sz.h };
       S.widgets.push(cfg); makeWidget(cfg); saveWidgets(cfg.id);
       bmPanel.classList.remove('open');
     });
@@ -1545,11 +1839,19 @@ function applyFTRotation(wrap, noteObj) {
   wrap.style.transform = rot ? `rotate(${rot}deg)` : '';
 }
 
+// Matches --text of each theme in styles.css (used when a note has no custom color).
+function getThemeDefaultTextHex() {
+  if (S.theme === 'light') return '#1a1714';
+  if (S.theme === 'bw') return '#000000';
+  if (S.theme === 'glass') return '#f0f4ff';
+  return '#f0ede8';
+}
+
 function setActiveFT(ref) {
   activeFT = (viewMode || !ref) ? null : ref;
   if (!activeFT) { ftStyleBar.classList.remove('show'); return; }
   ftBoldBtn.classList.toggle('active', activeFT.noteObj.weight === 600);
-  ftColorInp.value = activeFT.noteObj.color || '#f0ede8';
+  ftColorInp.value = activeFT.noteObj.color || getThemeDefaultTextHex();
   ftSizeRead.textContent = (activeFT.noteObj.size || 14) + 'px';
   ftRotRead.textContent = (activeFT.noteObj.rot || 0) + '°';
   ftStyleBar.classList.add('show');
@@ -1599,7 +1901,22 @@ ftDeleteBtn.addEventListener('click', () => {
   VelinStore.deleteFtNote(activeFT.noteObj.id);
   activeFT.wrap.remove(); setActiveFT(null);
 });
-window.addEventListener('resize', positionFtStylebar);
+// Pull widgets / free-text notes back into view when the window shrinks.
+// Stored coordinates (cfg.x / noteObj.x) are left untouched, so items return
+// to their real spot if the window is enlarged again.
+function clampAllToViewport() {
+  Object.values(wRefs).forEach(({ el, cfg }) => {
+    el.style.left = clampX(cfg.x ?? el.offsetLeft) + 'px';
+    el.style.top = clampY(cfg.y ?? el.offsetTop) + 'px';
+  });
+  document.querySelectorAll('.ft-wrapper').forEach(wrap => {
+    const n = wrap._noteObj;
+    wrap.style.left = clampX(n ? n.x : wrap.offsetLeft) + 'px';
+    wrap.style.top = clampY(n ? n.y : wrap.offsetTop) + 'px';
+  });
+  positionFtStylebar();
+}
+window.addEventListener('resize', clampAllToViewport);
 
 function makeFTNote(noteObj) {
   // Free-text notes are independent absolutely positioned editors with drag,
@@ -1613,7 +1930,8 @@ function makeFTNote(noteObj) {
   noteObj.rot = normalizeRotation(noteObj.rot || 0);
 
   const wrap = document.createElement('div'); wrap.className = 'ft-wrapper';
-  wrap.style.cssText = `left:${noteObj.x}px;top:${noteObj.y}px;position:absolute;z-index:${++zTop};`;
+  wrap._noteObj = noteObj;
+  wrap.style.cssText = `left:${clampX(noteObj.x || 0)}px;top:${clampY(noteObj.y || 0)}px;position:absolute;z-index:${nextZIndex()};`;
   applyFTRotation(wrap, noteObj);
 
   const del = document.createElement('button'); del.className = 'ft-del-btn'; del.textContent = '×';
@@ -1640,8 +1958,8 @@ function makeFTNote(noteObj) {
 
   const onMove = e => {
     if (!dr2) return;
-    wrap.style.left = (e.clientX - ox2) + 'px';
-    wrap.style.top = (e.clientY - oy2) + 'px';
+    wrap.style.left = clampX(e.clientX - ox2) + 'px';
+    wrap.style.top = clampY(e.clientY - oy2) + 'px';
     if (activeFT && activeFT.noteObj === noteObj) positionFtStylebar();
   };
   const onUp = () => {

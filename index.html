@@ -1,159 +1,114 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>New Tab</title>
+  <title>Velin — a new-tab start page</title>
+  <meta name="description" content="Velin is a new-tab start page with widgets, markdown notes, bookmarks and custom backgrounds. Free to use, and everything stays in your browser.">
   <link rel="icon" href="./favicon-dark.svg" media="(prefers-color-scheme: dark)" type="image/svg+xml">
   <link rel="icon" href="./favicon-light.svg" media="(prefers-color-scheme: light)" type="image/svg+xml">
-
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@300;400;500;600&display=swap"
-    rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet"
-    media="print" onload="this.media='all'">
-  <noscript>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
-  </noscript>
-  <link rel="stylesheet" href="./styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./landing.css">
 </head>
+<body id="top">
+  <header class="nav">
+    <a class="brand" href="./">Velin</a>
+    <nav>
+      <a href="./#features">Features</a>
+      <a href="./guide">Guide</a>
+      <a href="#contact">Contact</a>
+      <a href="https://github.com/Tahsin2155/velin">GitHub</a>
+    </nav>
+  </header>
 
-<body>
+  <main>
+    <section class="hero">
+      <h1>Make your new tab yours.</h1>
+      <p class="lead">Velin is a start page for your browser. Add widgets, write markdown notes, pin bookmarks and pick a background. It all saves in your browser, with no account and no sync server.</p>
+      <div class="cta">
+        <a class="btn primary" href="./guide#install">Get the extension</a>
+        <a class="btn" href="./app">Try it in the browser</a>
+      </div>
+      <p class="fine">Free to use, with the source on GitHub. The extension works in Chrome, Edge and Brave. Using another browser? The <a href="./guide#without-extension">guide</a> has options.</p>
+      <div class="frame">
+        <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+        <figure class="shot" data-file="hero.png"><img src="./screenshots/hero.png" width="1600" height="1000" alt="Velin as a new tab: a clock, a todo list, a note and bookmarks on a custom background"></figure>
+      </div>
+    </section>
 
-  <div id="brand-mark" aria-label="Velin brand">Velin</div>
+    <section id="features" class="section">
+      <h2>What's in it</h2>
+      <div class="feature"><div class="copy"><h3>Widgets you arrange yourself</h3>
+        <p>Clock, bookmarks, todo, notes and a pomodoro timer. Drag a widget by its header, resize it from the corner, and it stays where you left it. The pomodoro keeps running across tabs.</p></div>
+        <figure class="shot" data-file="widgets.png"><img src="./screenshots/widgets.png" width="1600" height="1000" loading="lazy" alt="Edit mode with the toolbar at the bottom and several widgets being arranged"></figure></div>
+      <div class="feature flip"><div class="copy"><h3>Markdown notes</h3>
+        <p>A note widget is a small markdown editor with a live preview: headings, bold and italic, code, links, lists and tables.</p></div>
+        <figure class="shot" data-file="notes.png"><img src="./screenshots/notes.png" width="1600" height="1000" loading="lazy" alt="A note widget showing rendered markdown, including a table"></figure></div>
+      <div class="feature"><div class="copy"><h3>Your own background</h3>
+        <p>Solid colors, gradients, or an image of your own, with brightness and blur sliders.</p></div>
+        <figure class="shot" data-file="backgrounds.png"><img src="./screenshots/backgrounds.png" width="1600" height="1000" loading="lazy" alt="The background panel open, with an image background behind the widgets"></figure></div>
 
-  <div id="bg-img-layer"></div>
-  <div id="bg-layer"></div>
-  <div id="canvas"></div>
+      <!-- Themes section hidden for now (screenshots: theme-dark/light/glass/bw.png). Add a four-up grid of those here to bring it back. -->
 
-  <!-- MODE TOGGLE -->
-  <button id="mode-toggle" title="Toggle view/edit mode (E)">
-    <span id="mode-icon">✦</span>
-    <span id="mode-label">view</span>
-  </button>
+      <ul class="also">
+        <li><b>View and edit modes</b>Press <kbd>E</kbd> to lock everything in place, or unlock it to rearrange.</li>
+        <li><b>Free-floating text</b>Place text anywhere on the canvas.</li>
+        <li><b>Export and import</b>Save everything to one JSON file and load it back anywhere.</li>
+        <li><b>No build step</b>Four files. Open <code>app.html</code> and it works.</li>
+      </ul>
+    </section>
 
-  <!-- TOOLBAR -->
-  <div id="toolbar">
-    <div class="theme-dot td-dark" data-theme="dark"></div>
-    <div class="theme-dot td-light" data-theme="light"></div>
-    <div class="theme-dot td-glass" data-theme="glass"></div>
-    <div class="theme-dot td-bw" data-theme="bw"></div>
-    <div class="tb-sep"></div>
-    <button class="tb-btn" data-add="clock">⊕ clock</button>
-    <button class="tb-btn" id="bm-launcher-btn">⊕ bookmarks</button>
-    <button class="tb-btn" data-add="todo">⊕ todo</button>
-    <button class="tb-btn" data-add="note">⊕ note</button>
-    <button class="tb-btn" data-add="pomodoro">⊕ pomodoro</button>
-    <div class="tb-sep"></div>
-    <button class="tb-btn" id="ft-toggle-btn">✏ text</button>
-    <button class="tb-btn" id="bg-toggle-btn">◑ bg</button>
-    <button class="tb-btn" id="export-btn" title="Export settings">⬇ export</button>
-    <button class="tb-btn" id="import-btn" title="Import settings">⬆ import</button>
-    <input type="file" id="import-file" accept=".json" style="display:none;">
-    <div class="tb-sep"></div>
-    <button class="tb-btn" id="blur-toggle-btn" title="Toggle backdrop blur">◈ blur: auto</button>
-  </div>
+    <section class="section">
+      <h2>Use it your way</h2>
+      <div class="ways">
+        <a href="./guide#install"><h3>Velin's extension</h3><p>Chrome, Edge and Brave. Velin becomes your new tab and loads from files on your computer.</p><span>Install steps</span></a>
+        <a href="./guide#without-extension"><h3>Another extension</h3><p>Any browser. A new-tab extension or a browser setting sends new tabs to the web version.</p><span>See the options</span></a>
+        <a href="./app"><h3>Just the website</h3><p>No setup at all. Open it when you want it, or bookmark it.</p><span>Open Velin</span></a>
+      </div>
+    </section>
 
-  <!-- BOOKMARK PANEL -->
-  <div id="bm-panel">
-    <div id="bm-panel-title">bookmarks</div>
-    <div id="bm-saved-list"></div>
-    <div id="bm-add-row">
-      <input class="mini-input" id="bm-name-inp" placeholder="Name" style="max-width:90px;">
-      <input class="mini-input" id="bm-url-inp" placeholder="https://...">
-      <button class="add-btn" id="bm-add-btn">add</button>
+    <section class="section narrow">
+      <h2>Everything stays in your browser</h2>
+      <p>Widgets, notes, bookmarks and background images are stored in your browser's IndexedDB. There's no account and no Velin server.</p>
+      <p>Two things do reach the network: fonts load from Google Fonts, and bookmark icons are looked up through DuckDuckGo's icon service (then the site's own favicon as a fallback).</p>
+    </section>
+  </main>
+
+  <footer id="contact" class="site-footer">
+    <div class="f-grid has-form">
+      <div class="f-brand">
+        <a class="brand" href="./">Velin</a>
+        <p>A start page for your new tab. Widgets, notes, bookmarks and your own background, kept in your browser.</p>
+      </div>
+      <nav class="f-col" aria-label="Velin">
+        <h4>Velin</h4>
+        <a href="./guide#install">Get the extension</a>
+        <a href="./app">Open the web version</a>
+        <a href="./guide">Guide</a>
+      </nav>
+      <nav class="f-col" aria-label="Project">
+        <h4>Project</h4>
+        <a href="https://github.com/Tahsin2155/velin">Source on GitHub</a>
+        <a href="https://github.com/Tahsin2155/velin/releases">Releases</a>
+        <a href="https://github.com/Tahsin2155/velin/issues">Report an issue</a>
+        <a href="https://tahsin2155.github.io">Made by Tahsin</a>
+      </nav>
+      <form id="contact-form" class="contact" action="https://formspree.io/f/xyeewrbp" method="POST">
+        <h4>Send me a message</h4>
+        <p class="f-note">Bug, idea, or just hello. Sent through <a href="https://formspree.io">Formspree</a> and emailed to me; the app itself never sends your data anywhere.</p>
+        <label><span>Name <span class="opt">(optional)</span></span><input type="text" name="name" autocomplete="name" maxlength="100"></label>
+        <label>Email<input type="email" name="email" autocomplete="email" required maxlength="200"></label>
+        <label>Message<textarea name="message" rows="4" required maxlength="5000"></textarea></label>
+        <input type="hidden" name="_subject" value="Velin — message from the website">
+        <input type="text" name="_gotcha" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <button class="btn primary" type="submit">Send message</button>
+        <p id="contact-status" role="status" aria-live="polite"></p>
+      </form>
     </div>
-    <button class="tb-btn" id="bm-panel-close" style="align-self:flex-end;font-size:11px;">close ✕</button>
-  </div>
-
-  <!-- BG PANEL -->
-  <div id="bg-panel">
-    <div>
-      <div class="bg-section-title">background</div>
-      <div class="bg-tabs">
-        <button class="bg-tab active" data-bgtab="solid">solid</button>
-        <button class="bg-tab" data-bgtab="gradient">gradient</button>
-        <button class="bg-tab" data-bgtab="image">image</button>
-      </div>
-    </div>
-    <div id="bg-solid-panel" class="show">
-      <div class="bg-section-title">color</div>
-      <div class="color-row">
-        <div class="color-swatch active" style="background:#0d0d0f" data-color="#0d0d0f"></div>
-        <div class="color-swatch" style="background:#0f1117" data-color="#0f1117"></div>
-        <div class="color-swatch" style="background:#1a1a2e" data-color="#1a1a2e"></div>
-        <div class="color-swatch" style="background:#f0ece5" data-color="#f0ece5"></div>
-        <div class="color-swatch" style="background:#1a2433" data-color="#1a2433"></div>
-        <div class="color-swatch" style="background:#181818" data-color="#181818"></div>
-        <input type="color" id="solid-color-picker" value="#0d0d0f" title="Custom color">
-      </div>
-    </div>
-    <div id="bg-gradient-panel">
-      <div class="bg-section-title">presets</div>
-      <div class="grad-row">
-        <div class="grad-preset" style="background:linear-gradient(135deg,#0d0d0f,#1a1a2e)"
-          data-grad="linear-gradient(135deg,#0d0d0f,#1a1a2e)"></div>
-        <div class="grad-preset" style="background:linear-gradient(135deg,#16213e,#0f3460)"
-          data-grad="linear-gradient(135deg,#16213e,#0f3460)"></div>
-        <div class="grad-preset" style="background:linear-gradient(135deg,#1a0a2e,#2d1b69)"
-          data-grad="linear-gradient(135deg,#1a0a2e,#2d1b69)"></div>
-        <div class="grad-preset" style="background:linear-gradient(135deg,#0a1628,#1e3a5f)"
-          data-grad="linear-gradient(135deg,#0a1628,#1e3a5f)"></div>
-        <div class="grad-preset" style="background:linear-gradient(135deg,#1a2520,#0d3b2e)"
-          data-grad="linear-gradient(135deg,#1a2520,#0d3b2e)"></div>
-        <div class="grad-preset" style="background:linear-gradient(160deg,#f0ece5,#d4c8b8)"
-          data-grad="linear-gradient(160deg,#f0ece5,#d4c8b8)"></div>
-      </div>
-      <div class="color-row" style="margin-top:10px;">
-        <span style="font-size:11px;color:var(--text2);">from</span>
-        <input type="color" id="grad-c1" value="#0d0d0f">
-        <span style="font-size:11px;color:var(--text2);">to</span>
-        <input type="color" id="grad-c2" value="#1a1a2e">
-        <select id="grad-dir"
-          style="background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:3px 6px;font-size:11px;font-family:var(--font-sans);outline:none;">
-          <option value="135deg">↘</option>
-          <option value="to bottom">↓</option>
-          <option value="to right">→</option>
-          <option value="45deg">↗</option>
-        </select>
-      </div>
-    </div>
-    <div id="bg-image-panel">
-      <label class="img-upload-btn" for="img-upload">↑ upload image</label>
-      <input type="file" id="img-upload" accept="image/*" style="display:none">
-      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
-        <label style="font-size:11px;color:var(--text2);min-width:50px;">brightness</label>
-        <input type="range" id="img-brightness" min="0" max="200" value="100">
-        <span id="brightness-val" style="font-size:11px;color:var(--text2);min-width:28px;">100%</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
-        <label style="font-size:11px;color:var(--text2);min-width:50px;">blur</label>
-        <input type="range" id="img-blur" min="0" max="20" value="0">
-        <span id="blur-val" style="font-size:11px;color:var(--text2);min-width:28px;">0px</span>
-      </div>
-    </div>
-    <button class="tb-btn" id="bg-close-btn" style="align-self:flex-end;">close ✕</button>
-  </div>
-
-  <div id="ft-hint">click to place text — focus note to style — hover to delete — Esc exits</div>
-  <div id="ft-stylebar">
-    <button class="fts-btn" id="ft-size-dec" title="Smaller text">A-</button>
-    <button class="fts-btn" id="ft-size-inc" title="Larger text">A+</button>
-    <button class="fts-btn" id="ft-rot-dec" title="Rotate left">↺</button>
-    <button class="fts-btn" id="ft-rot-inc" title="Rotate right">↻</button>
-    <button class="fts-btn" id="ft-bold" title="Toggle bold">B</button>
-    <input type="color" id="ft-color" title="Text color" value="#f0ede8">
-    <span id="ft-size-read">14px</span>
-    <span id="ft-rot-read">0°</span>
-    <button class="fts-btn" id="ft-del" title="Delete text">✕</button>
-  </div>
-  <div id="img-warn">image too large to save — use a smaller file</div>
-
-  <script src="./storage.js"></script>
-  <script src="./script.js"></script>
+    <div class="f-bar"><span>Built with help from AI (Claude).</span><a href="#top">Back to top</a></div>
+  </footer>
+  <script src="./landing.js"></script>
 </body>
-
 </html>

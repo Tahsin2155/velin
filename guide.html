@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guide — Velin</title>
+  <meta name="description" content="How to install Velin's extension, use Velin with another extension or browser setting, and how every widget works.">
+  <link rel="icon" href="./favicon-dark.svg" media="(prefers-color-scheme: dark)" type="image/svg+xml">
+  <link rel="icon" href="./favicon-light.svg" media="(prefers-color-scheme: light)" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./landing.css">
+</head>
+<body id="top">
+  <header class="nav">
+    <a class="brand" href="./">Velin</a>
+    <nav>
+      <a href="./#features">Features</a>
+      <a href="./guide" aria-current="page">Guide</a>
+      <a href="#contact">Contact</a>
+      <a href="https://github.com/Tahsin2155/velin">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="guide-wrap">
+    <aside class="toc" aria-label="On this page">
+      <a href="#install">Install the extension</a>
+      <a href="#without-extension">Without the extension</a>
+      <a href="#using">Using Velin</a>
+      <a href="#widgets">Widgets</a>
+      <a href="#look">Text, background, themes</a>
+      <a href="#backup">Backup and moving data</a>
+      <a href="#keys">Shortcuts</a>
+      <a href="#trouble">Troubleshooting</a>
+    </aside>
+
+    <main class="prose">
+      <h1>Guide</h1>
+      <p class="lead-l">Get Velin onto your new tab, then learn your way around it. Pick the route that fits your browser:</p>
+      <div class="ways">
+        <a href="#install"><h3>Velin's extension</h3><p>Chrome, Edge, Brave. About a minute.</p></a>
+        <a href="#without-extension"><h3>Another extension</h3><p>Any browser. Uses the web version.</p></a>
+        <a href="#using"><h3>Already set up?</h3><p>Jump to how Velin works.</p></a>
+      </div>
+
+      <h2 id="install">Install the extension</h2>
+      <p>For Chrome, Edge and Brave. Velin isn't on the Web Store yet, so you load it yourself in developer mode.</p>
+      <p><a class="btn primary" href="https://github.com/Tahsin2155/velin/releases/latest/download/velin-extension.zip">Download velin-extension.zip</a></p>
+      <ol class="stepper">
+        <li><b>Unzip it somewhere permanent.</b> The browser loads Velin from that folder, so don't delete it afterwards.</li>
+        <li><b>Open your browser's extensions page.</b> Browsers block links to it, so copy the address and paste it into a new tab.
+          <span class="copyrow"><button class="copy" data-copy="chrome://extensions">chrome://extensions</button><button class="copy" data-copy="edge://extensions">edge://extensions</button><button class="copy" data-copy="brave://extensions">brave://extensions</button></span></li>
+        <li><b>Turn on Developer mode.</b> It's the switch at the top right.</li>
+        <li><b>Click Load unpacked</b> and choose the unzipped folder.</li>
+        <li><b>Open a new tab.</b> That's Velin.</li>
+      </ol>
+      <dl class="defs">
+        <dt>Developer-mode notice</dt><dd>Your browser may warn about developer-mode extensions. That's expected until Velin is on the Web Store.</dd>
+        <dt>Updating</dt><dd>Download the new zip, replace the files in the same folder, then press the reload icon on Velin's card. Your data stays.</dd>
+        <dt>Removing</dt><dd>Removing the extension deletes its data, so export first (see <a href="#backup">backup</a>).</dd>
+        <dt>Firefox</dt><dd>Not supported as an extension yet. Use the options below.</dd>
+      </dl>
+
+      <h2 id="without-extension">Use Velin without its extension</h2>
+      <p>The web version lives at the address below. Point your new tab at it with one of these options. Data you create this way belongs to the website, so it's separate from the extension's data.</p>
+      <p class="addr"><code>https://newvelintab.netlify.app/app</code><button class="copy" data-copy="https://newvelintab.netlify.app/app">Copy address</button></p>
+      <div class="tabs" data-tabs>
+        <div class="tablist" role="tablist" aria-label="Browser">
+          <button role="tab" id="t-chromium" aria-controls="p-chromium">Chrome, Edge, Brave, Vivaldi</button>
+          <button role="tab" id="t-firefox" aria-controls="p-firefox">Firefox</button>
+          <button role="tab" id="t-safari" aria-controls="p-safari">Safari</button>
+          <button role="tab" id="t-any" aria-controls="p-any">Any browser</button>
+        </div>
+        <div class="panel" id="p-chromium" role="tabpanel" aria-labelledby="t-chromium">
+          <p>These browsers have no setting for a custom new tab address, but a "new tab redirect" extension does the job.</p>
+          <ol class="plain">
+            <li>Search your extension store for <i>new tab redirect</i> or <i>custom new tab URL</i> (Edge can also use the Chrome Web Store).</li>
+            <li>Install one and open its options.</li>
+            <li>Paste the Velin address. Use the full address starting with <code>https://</code>.</li>
+            <li>Open a new tab.</li>
+          </ol>
+          <p class="note"><b>Choose carefully.</b> A new-tab extension sees every new tab you open. Read the permissions and privacy details first and prefer one that asks for little. Redirect extensions also usually can't put the cursor in the address bar.</p>
+        </div>
+        <div class="panel" id="p-firefox" role="tabpanel" aria-labelledby="t-firefox">
+          <p>Firefox can set a custom page for the homepage and new windows (<i>Settings, Home, Homepage and new windows, Custom URLs</i>). For new tabs it only offers Firefox Home or a blank page, so putting Velin on every new tab takes a new-tab add-on from addons.mozilla.org. Search for <i>new tab override</i> and use the address above.</p>
+        </div>
+        <div class="panel" id="p-safari" role="tabpanel" aria-labelledby="t-safari">
+          <p>Safari can do it by itself. Open <i>Safari, Settings</i> (older versions say <i>Preferences</i>), go to <b>General</b>, set the <b>Homepage</b> to the Velin address, and choose <b>Homepage</b> for new tabs.</p>
+        </div>
+        <div class="panel" id="p-any" role="tabpanel" aria-labelledby="t-any">
+          <p>Bookmark the address, or set it as your startup page (in Chrome, <i>Settings, On startup, Open a specific page</i>). You won't get it on every new tab, but it's one click away.</p>
+        </div>
+      </div>
+
+      <h2 id="using">Using Velin</h2>
+      <p>Everything saves automatically to your browser's IndexedDB. There's no save button.</p>
+      <ol class="plain">
+        <li>Open a new tab (or the web version).</li>
+        <li>Click <b>✦ view</b> at the top to switch to <b>edit mode</b>, which unlocks dragging, resizing and adding.</li>
+        <li>Add widgets, change the background or place text from the toolbar at the bottom.</li>
+        <li>Switch back to view mode so nothing moves by accident.</li>
+      </ol>
+      <dl class="defs">
+        <dt>View mode ✦</dt><dd>Widgets are locked in place. The safe default for everyday use.</dd>
+        <dt>Edit mode ✎</dt><dd>Widgets can be dragged, resized and deleted, and free text can be placed. Press <kbd>E</kbd> to switch.</dd>
+      </dl>
+
+      <h2 id="widgets">Widgets</h2>
+      <p>Add them from the toolbar. In edit mode, drag a widget by its header, resize it from the bottom-right corner, and remove it with ✕.</p>
+      <dl class="defs">
+        <dt>Clock</dt><dd>Click the face to switch between digital and analog.</dd>
+        <dt>Bookmarks</dt><dd>Add a name and a URL. Velin looks up the site's icon and falls back to a letter. Only <code>http://</code> and <code>https://</code> addresses are accepted.</dd>
+        <dt>Todo</dt><dd>Type a task and press <kbd>Enter</kbd>. Tick to finish, <b>×</b> to delete, and <b>✓×</b> in the header to clear everything finished.</dd>
+        <dt>Note</dt><dd>A markdown editor with live preview: headings, bold, italic, code and code blocks, links, bullet, numbered and task lists, quotes, rules and tables. Notes always show the rendered version in view mode.</dd>
+        <dt>Pomodoro</dt><dd>25 minutes of focus, a 5-minute break, and a 15-minute break every fourth session. Allow notifications if you want an alert when a session ends. The timer stays in sync across tabs.</dd>
+      </dl>
+      <figure class="shot" data-file="widgets.png"><img src="./screenshots/widgets.png" width="1600" height="1000" loading="lazy" alt="Edit mode with several widgets on the canvas"></figure>
+
+      <h2 id="look">Text, background and themes</h2>
+      <dl class="defs">
+        <dt>Free text</dt><dd>Click <b>✏ text</b> in edit mode, then click anywhere to drop a text box. Select it for a style bar: size, rotation, bold, colour, delete. <kbd>Esc</kbd> leaves text mode.</dd>
+        <dt>Background</dt><dd><b>◑ bg</b> opens three tabs: solid colours, gradients, and your own image (up to 8 MB) with brightness and blur sliders. Only one image is kept; a new upload replaces it.</dd>
+        <dt>Themes</dt><dd>The four dots in the toolbar switch between dark, light, glass, and black and white.</dd>
+        <dt>Backdrop blur</dt><dd><b>◈ blur</b> cycles auto, on and off. If Velin feels slow on an older machine, try off.</dd>
+      </dl>
+      <figure class="shot" data-file="backgrounds.png"><img src="./screenshots/backgrounds.png" width="1600" height="1000" loading="lazy" alt="The background panel open with an image background"></figure>
+
+      <h2 id="backup">Backup and moving data</h2>
+      <dl class="defs">
+        <dt>⬇ export</dt><dd>Downloads one JSON file with your whole setup: theme, background, widgets, notes and bookmarks.</dd>
+        <dt>⬆ import</dt><dd>Loads such a file. It <i>replaces</i> your current setup, so export first if you want to keep it.</dd>
+      </dl>
+      <p>The extension, the web version and each browser keep separate storage. To move between them, export in the old place and import in the new one. Do this before removing the extension or clearing site data, both of which erase Velin's data.</p>
+
+      <h2 id="keys">Shortcuts</h2>
+      <dl class="defs">
+        <dt><kbd>E</kbd></dt><dd>Toggle view and edit mode (not while typing in a text field).</dd>
+        <dt><kbd>Enter</kbd></dt><dd>Confirm a new todo item or bookmark.</dd>
+        <dt><kbd>Esc</kbd></dt><dd>Leave free-text placement mode.</dd>
+      </dl>
+
+      <h2 id="trouble">Troubleshooting</h2>
+      <details class="qa"><summary>My new tab still shows the browser's default page</summary><p>Check that Velin is switched on at your extensions page. Only one extension can control the new tab, so turn off any other new-tab extension.</p></details>
+      <details class="qa"><summary>My widgets or notes are gone</summary><p>Velin stores data per place: the extension, the website and each browser are separate, and removing the extension or clearing site data erases it. If you set Velin up in one place and opened another, you're looking at an empty copy. Import an export file to bring your setup across.</p></details>
+      <details class="qa"><summary>I don't get a notification when the Pomodoro ends</summary><p>Notifications need your permission. Allow them when asked, or check the page's notification permission in your browser's site settings.</p></details>
+      <details class="qa"><summary>Velin feels slow</summary><p>Set <b>◈ blur</b> to off and use a smaller background image.</p></details>
+      <details class="qa"><summary>Something else</summary><p>Send a message from the form on the <a href="./#contact">home page footer</a>, or open an issue on <a href="https://github.com/Tahsin2155/velin/issues">GitHub</a>.</p></details>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <div class="f-grid">
+      <div class="f-brand">
+        <a class="brand" href="./">Velin</a>
+        <p>A start page for your new tab. Widgets, notes, bookmarks and your own background, kept in your browser.</p>
+      </div>
+      <nav class="f-col" aria-label="Velin">
+        <h4>Velin</h4>
+        <a href="./guide#install">Get the extension</a>
+        <a href="./app">Open the web version</a>
+        <a href="./guide">Guide</a>
+      </nav>
+      <nav class="f-col" aria-label="Project">
+        <h4>Project</h4>
+        <a href="https://github.com/Tahsin2155/velin">Source on GitHub</a>
+        <a href="https://github.com/Tahsin2155/velin/releases">Releases</a>
+        <a href="https://github.com/Tahsin2155/velin/issues">Report an issue</a>
+        <a href="https://tahsin2155.github.io">Made by Tahsin</a>
+      </nav>
+    </div>
+    <p class="f-ask">Questions or feedback? <a href="./#contact">Send a message</a>.</p>
+    <div class="f-bar"><span>Built with help from AI (Claude).</span><a href="#top">Back to top</a></div>
+  </footer>
+  <script src="./landing.js"></script>
+</body>
+</html>
