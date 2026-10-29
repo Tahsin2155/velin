@@ -35,7 +35,7 @@ build_extension.py                                builds dist/velin-extension.zi
 .github/workflows/release-extension.yml           builds and publishes the zip when a v* tag is pushed
 ```
 
-The extension is the same app, not a copy: its manifest overrides the new tab with `app.html`, and `build_extension.py` zips only the files the extension needs. The website is hosted on Netlify. See [RELEASING.md](RELEASING.md) for how a release is made.
+The extension is the same app, not a copy: its manifest overrides the new tab with `app.html`, and `build_extension.py` zips only the files the extension needs. The website is hosted on Netlify. To release the extension, bump `version` in `manifest.json`, push, then push a matching tag (for example `v2.1.1`); the workflow builds and publishes `velin-extension.zip`.
 
 Extension pages can't run inline scripts or inline event handlers (`onclick=...`, `onload=...`), so keep `app.html` free of them.
 
