@@ -3,7 +3,7 @@
 // ══════════════════════════════
 const DEF = {
   theme: 'dark',
-  viewMode: false,
+  viewMode: true,     // per-tab and never persisted: every tab starts in the safe view mode
   blurMode: 'auto',   // 'auto' | 'on' | 'off'
   bg: { type: 'solid', value: '#0d0d0f' },
   widgets: [],
@@ -103,7 +103,6 @@ let _saveGuard = true;
 
 function saveTheme(flush = false) { if (_saveGuard) return; VelinStore.setMeta('theme', S.theme, flush); }
 function saveBlurMode(flush = false) { if (_saveGuard) return; VelinStore.setMeta('blurMode', S.blurMode, flush); }
-function saveViewMode(flush = false) { if (_saveGuard) return; VelinStore.setMeta('viewMode', S.viewMode, flush); }
 function saveBg(flush = false) { if (_saveGuard) return; VelinStore.setMeta('bg', S.bg, flush); }
 
 // ══════════════════════════════
@@ -180,7 +179,6 @@ async function reconcileFromStore() {
   try {
     if (meta.theme && meta.theme !== S.theme) applyTheme(meta.theme);
     if (meta.blurMode && meta.blurMode !== S.blurMode) { S.blurMode = meta.blurMode; applyBlurMode(meta.blurMode); }
-    if (typeof meta.viewMode === 'boolean' && meta.viewMode !== viewMode) { viewMode = meta.viewMode; applyMode(); }
     if (meta.bg && JSON.stringify(meta.bg) !== JSON.stringify(S.bg)) {
       S.bg = meta.bg;
       await applyBg();
@@ -260,7 +258,6 @@ async function bootApp() {
 
     if (meta.theme) S.theme = meta.theme;
     if (meta.blurMode) S.blurMode = meta.blurMode;
-    if (typeof meta.viewMode === 'boolean') S.viewMode = meta.viewMode;
     if (meta.bg) S.bg = meta.bg;
 
     S.widgets = Array.isArray(widgets) ? widgets : [];
@@ -288,7 +285,9 @@ async function bootApp() {
   applyTheme(S.theme);
   applyBlurMode(S.blurMode || 'auto');
   applyMode();
-  await applyBg();
+  // An image background means reading a Blob out of IndexedDB. Start it now but
+  // don't make the widgets wait behind it: on a fresh tab people click straight away.
+  const bgReady = applyBg();
   syncBgPanelUI();
   renderBmSaved();
   // Start the layer counter above every persisted widget z so un-layered
@@ -296,6 +295,7 @@ async function bootApp() {
   S.widgets.forEach(w => { if (typeof w.z === 'number' && w.z >= Z_BASE && w.z <= Z_MAX && w.z > zTop) zTop = w.z; });
   renderFT();
   S.widgets.forEach(cfg => makeWidget(cfg));
+  await bgReady;
 
   setupCrossTabSync();
 
@@ -601,7 +601,7 @@ function applyMode() {
   document.body.classList.toggle('view-mode', viewMode);
   document.getElementById('mode-label').textContent = viewMode ? 'edit' : 'view';
   document.getElementById('mode-icon').textContent = viewMode ? '✎' : '✦';
-  S.viewMode = viewMode; saveViewMode();
+  S.viewMode = viewMode; // per-tab only: not saved, not synced to other tabs
   emitModeChange(); // FIX: broadcast instead of per-widget MutationObserver
   if (typeof updateClockSize === 'function') {
     Object.values(wRefs).forEach(r => { if (r.cfg.type === 'clock') updateClockSize(r.cfg.id); });
@@ -611,11 +611,17 @@ function applyMode() {
 document.getElementById('mode-toggle').addEventListener('click', () => { viewMode = !viewMode; applyMode(); });
 const _blurBtn = document.getElementById('blur-toggle-btn');
 if (_blurBtn) _blurBtn.addEventListener('click', cycleBlurMode);
+let _lastKeyAt = 0;
 document.addEventListener('keydown', e => {
+  // On a new-tab page the page itself can hold focus while someone types a URL
+  // or a search, so ordinary typing must not flip the mode. Only a lone,
+  // deliberate 'e' counts: not right after page load, not mid-burst of typing.
+  const now = performance.now(), gap = now - _lastKeyAt; _lastKeyAt = now;
   const active = document.activeElement;
   const tag = active ? active.tagName : '';
   const isTextual = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (active && active.isContentEditable);
-  if ((e.key || '').toLowerCase() === 'e' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !isTextual) {
+  if ((e.key || '').toLowerCase() === 'e' && !e.repeat && !e.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey && !isTextual
+      && now > 1500 && gap > 700) {
     viewMode = !viewMode; applyMode();
   }
 });
@@ -1227,15 +1233,22 @@ function buildBookmarkWidget(body, cfg, id) {
   // Edit mode: a single click must not navigate away (it's how you select/arrange
   // the widget). Double-click still opens the link. View mode behaves normally,
   // except right after a drag.
+  a.draggable = false; // a native link-drag dropped back on the page would navigate the tab
+  a.addEventListener('dragstart', e => e.preventDefault());
   a.addEventListener('click', e => {
-    if (!viewMode || _dragMoved) e.preventDefault();
+    // Never navigate: while arranging (edit mode), right after a drag, or when a
+    // panel is open — that click only means "dismiss the panel".
+    const panelOpen = bmPanel.classList.contains('open') || bgPanel.classList.contains('open');
+    if (!viewMode || _dragMoved || panelOpen) e.preventDefault();
   });
+  // Middle-click doesn't fire 'click' but would still open the link in a new tab.
+  a.addEventListener('auxclick', e => { if (!viewMode) e.preventDefault(); });
   a.addEventListener('dblclick', () => {
     if (!viewMode && normalizedUrl) window.location.href = normalizedUrl;
   });
 
   const favWrap = document.createElement('div'); favWrap.className = 'bm-favicon-wrap';
-  const fav = document.createElement('img'); fav.className = 'bm-widget-favicon';
+  const fav = document.createElement('img'); fav.className = 'bm-widget-favicon'; fav.draggable = false;
 
   const hostname = getHostname(cfg.bmUrl);
   const letter = document.createElement('div'); letter.className = 'bm-favicon-letter';
@@ -1777,10 +1790,31 @@ document.getElementById('bm-url-inp').addEventListener('keydown', e => { if (e.k
 // ══════════════════════════════
 let _dragMoved = false;
 let _dragStarted = false;
+let _dragX = 0, _dragY = 0;
+const DRAG_SLOP = 4; // px of travel before a press counts as a drag rather than a click
 
-document.addEventListener('mousedown', () => { _dragStarted = true; _dragMoved = false; });
-document.addEventListener('mousemove', e => { if (_dragStarted && e.buttons === 1) _dragMoved = true; });
+document.addEventListener('mousedown', e => { _dragStarted = true; _dragMoved = false; _dragX = e.clientX; _dragY = e.clientY; });
+document.addEventListener('mousemove', e => {
+  if (_dragStarted && !_dragMoved && e.buttons === 1 && Math.hypot(e.clientX - _dragX, e.clientY - _dragY) > DRAG_SLOP) _dragMoved = true;
+});
 document.addEventListener('mouseup', () => { _dragStarted = false; });
+
+// Nothing in Velin takes drops, and a link or file dropped on a page navigates
+// the tab away. Block that everywhere except real text targets (inputs, notes,
+// free text), so dropping text into those keeps working.
+function _allowsDrop(e) {
+  const t = e.target;
+  if (!t) return false;
+  const types = e.dataTransfer ? Array.from(e.dataTransfer.types || []) : [];
+  if (types.includes('Files')) return t.tagName === 'INPUT' && t.type === 'file';
+  return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || !!t.isContentEditable;
+}
+window.addEventListener('dragover', e => {
+  if (_allowsDrop(e)) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+});
+window.addEventListener('drop', e => { if (!_allowsDrop(e)) e.preventDefault(); });
 
 document.addEventListener('click', e => {
   if (_dragMoved) { _dragMoved = false; return; }

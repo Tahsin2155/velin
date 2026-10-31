@@ -643,6 +643,16 @@ body.view-mode .clock-date {
   opacity: .8;
 }
 
+/* View mode: only the icon + label are clickable, not the whole (invisible)
+   widget box. Auto margins keep it centered exactly where it was. */
+body.view-mode .bm-widget-inner {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  margin: auto;
+  padding: 6px 8px;
+}
+
 .bm-favicon-wrap {
   position: relative;
   width: 40px;

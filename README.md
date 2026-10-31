@@ -57,7 +57,7 @@ State lives entirely in **IndexedDB**, normalized into separate object stores ra
 
 | Store | Holds |
 |---|---|
-| `meta` | theme, blur mode, view mode, background settings |
+| `meta` | theme, blur mode, background settings |
 | `widgets` | one record per widget (clock, todo, note, pomodoro, bookmark instance) |
 | `bookmarks` | saved bookmark entries |
 | `ftNotes` | free-text canvas notes |

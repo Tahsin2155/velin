@@ -7,7 +7,7 @@ Velin is a custom new-tab page: a blank canvas where you drop widgets, write fre
 ## Quick start
 
 1. Open a new tab (or `app.html` if you're running it standalone).
-2. Click **✦ view** (top area) to flip into **edit mode** — this unlocks dragging, resizing, and adding widgets.
+2. Click **✎ edit** (top area) to flip into **edit mode** — this unlocks dragging, resizing, and adding widgets.
 3. Use the **toolbar** at the bottom to add widgets, change the background, or place text.
 4. Flip back to **view mode** when you're done arranging things, so nothing moves by accident.
 
@@ -22,6 +22,7 @@ Velin is a custom new-tab page: a blank canvas where you drop widgets, write fre
 
 - Click the mode button (top of screen) to toggle.
 - Or just press **`E`** on your keyboard (works anywhere except while typing in a text field).
+- The mode is per tab and is not saved: every new tab starts in view mode, and switching in one tab doesn't change your other tabs.
 
 ---
 
