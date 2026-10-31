@@ -27,7 +27,8 @@ There's no `src/`, no bundler config, no `package.json`. `storage.js` must load 
 ## Website and extension
 
 ```
-index.html, guide.html, landing.css, landing.js   the website (home page and guide)
+index.html, guide.html                            the website (home page and guide)
+home.css, guide.css, home.js, landing.js          site styles and behavior (landing.js: copy buttons, tabs, contents list, contact form)
 _redirects                                        Netlify: /app and /guide without .html
 screenshots/                                      images used by the website
 manifest.json, icons/                             the Chrome/Edge/Brave extension (Manifest V3)

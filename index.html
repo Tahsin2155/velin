@@ -3,101 +3,271 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Velin — a new-tab start page</title>
-  <meta name="description" content="Velin is a new-tab start page with widgets, markdown notes, bookmarks and custom backgrounds. Free to use, and everything stays in your browser.">
+  <script>document.documentElement.classList.add('js');</script>
+  <title>Velin - a customizable new tab page with widgets and notes</title>
+  <meta name="description" content="Velin turns your browser's new tab into widgets, markdown notes, bookmarks and a background you pick. Free, no account, and it all stays in your browser.">
+  <link rel="canonical" href="https://newvelintab.netlify.app/">
+  <meta name="theme-color" content="#131209">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Velin">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:title" content="Velin: a customizable new tab page">
+  <meta property="og:description" content="Widgets, markdown notes, bookmarks and your own background on every new tab. Free, no account, and it all stays in your browser.">
+  <meta property="og:url" content="https://newvelintab.netlify.app/">
+  <meta property="og:image" content="https://newvelintab.netlify.app/screenshots/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Velin as a new tab: a clock, a todo list, a note and bookmarks on a custom background">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Velin: a customizable new tab page">
+  <meta name="twitter:description" content="Widgets, markdown notes, bookmarks and your own background on every new tab. Free, no account, and it all stays in your browser.">
+  <meta name="twitter:image" content="https://newvelintab.netlify.app/screenshots/og.jpg">
+  <link rel="apple-touch-icon" href="./icons/icon-128.png">
   <link rel="icon" href="./favicon-dark.svg" media="(prefers-color-scheme: dark)" type="image/svg+xml">
   <link rel="icon" href="./favicon-light.svg" media="(prefers-color-scheme: light)" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./landing.css">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./home.css">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"Velin","url":"https://newvelintab.netlify.app/"},{"@type":"SoftwareApplication","name":"Velin","applicationCategory":"BrowserApplication","operatingSystem":"Chrome, Edge, Brave","url":"https://newvelintab.netlify.app/","image":"https://newvelintab.netlify.app/screenshots/og.jpg","description":"A new tab start page with widgets, markdown notes, bookmarks and custom backgrounds. Everything is stored in your browser.","featureList":["Draggable widgets: clock, bookmarks, todo, notes, pomodoro","Markdown notes with live preview","Custom backgrounds and themes","Export and import as JSON","No account, data stays in your browser"],"downloadUrl":"https://github.com/Tahsin2155/velin/releases/latest/download/velin-extension.zip","isAccessibleForFree":true,"author":{"@type":"Person","name":"Tahsin","url":"https://tahsin2155.github.io"},"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}]}</script>
 </head>
 <body id="top">
-  <header class="nav">
+  <!-- Icons: Phosphor (MIT), inlined as one sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><symbol id="i-arrow-right" viewBox="0 0 256 256" fill="currentColor"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></symbol><symbol id="i-github-logo" viewBox="0 0 256 256" fill="currentColor"><path d="M208.31,75.68A59.78,59.78,0,0,0,202.93,28,8,8,0,0,0,196,24a59.75,59.75,0,0,0-48,24H124A59.75,59.75,0,0,0,76,24a8,8,0,0,0-6.93,4,59.78,59.78,0,0,0-5.38,47.68A58.14,58.14,0,0,0,56,104v8a56.06,56.06,0,0,0,48.44,55.47A39.8,39.8,0,0,0,96,192v8H72a24,24,0,0,1-24-24A40,40,0,0,0,8,136a8,8,0,0,0,0,16,24,24,0,0,1,24,24,40,40,0,0,0,40,40H96v16a8,8,0,0,0,16,0V192a24,24,0,0,1,48,0v40a8,8,0,0,0,16,0V192a39.8,39.8,0,0,0-8.44-24.53A56.06,56.06,0,0,0,216,112v-8A58.14,58.14,0,0,0,208.31,75.68ZM200,112a40,40,0,0,1-40,40H112a40,40,0,0,1-40-40v-8a41.74,41.74,0,0,1,6.9-22.48A8,8,0,0,0,80,73.83a43.81,43.81,0,0,1,.79-33.58,43.88,43.88,0,0,1,32.32,20.06A8,8,0,0,0,119.82,64h32.35a8,8,0,0,0,6.74-3.69,43.87,43.87,0,0,1,32.32-20.06A43.81,43.81,0,0,1,192,73.83a8.09,8.09,0,0,0,1,7.65A41.72,41.72,0,0,1,200,104Z"/></symbol><symbol id="i-arrows-out-cardinal" viewBox="0 0 256 256" fill="currentColor"><path d="M90.34,61.66a8,8,0,0,1,0-11.32l32-32a8,8,0,0,1,11.32,0l32,32a8,8,0,0,1-11.32,11.32L136,43.31V96a8,8,0,0,1-16,0V43.31L101.66,61.66A8,8,0,0,1,90.34,61.66Zm64,132.68L136,212.69V160a8,8,0,0,0-16,0v52.69l-18.34-18.35a8,8,0,0,0-11.32,11.32l32,32a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32Zm83.32-72-32-32a8,8,0,0,0-11.32,11.32L212.69,120H160a8,8,0,0,0,0,16h52.69l-18.35,18.34a8,8,0,0,0,11.32,11.32l32-32A8,8,0,0,0,237.66,122.34ZM43.31,136H96a8,8,0,0,0,0-16H43.31l18.35-18.34A8,8,0,0,0,50.34,90.34l-32,32a8,8,0,0,0,0,11.32l32,32a8,8,0,0,0,11.32-11.32Z"/></symbol><symbol id="i-note-pencil" viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,58.34l-32-32a8,8,0,0,0-11.32,0l-96,96A8,8,0,0,0,88,128v32a8,8,0,0,0,8,8h32a8,8,0,0,0,5.66-2.34l96-96A8,8,0,0,0,229.66,58.34ZM124.69,152H104V131.31l64-64L188.69,88ZM200,76.69,179.31,56,192,43.31,212.69,64ZM224,128v80a16,16,0,0,1-16,16H48a16,16,0,0,1-16-16V48A16,16,0,0,1,48,32h80a8,8,0,0,1,0,16H48V208H208V128a8,8,0,0,1,16,0Z"/></symbol><symbol id="i-image" viewBox="0 0 256 256" fill="currentColor"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V158.75l-26.07-26.06a16,16,0,0,0-22.63,0l-20,20-44-44a16,16,0,0,0-22.62,0L40,149.37V56ZM40,172l52-52,80,80H40Zm176,28H194.63l-36-36,20-20L216,181.38V200ZM144,100a12,12,0,1,1,12,12A12,12,0,0,1,144,100Z"/></symbol><symbol id="i-eye" viewBox="0 0 256 256" fill="currentColor"><path d="M247.31,124.76c-.35-.79-8.82-19.58-27.65-38.41C194.57,61.26,162.88,48,128,48S61.43,61.26,36.34,86.35C17.51,105.18,9,124,8.69,124.76a8,8,0,0,0,0,6.5c.35.79,8.82,19.57,27.65,38.4C61.43,194.74,93.12,208,128,208s66.57-13.26,91.66-38.34c18.83-18.83,27.3-37.61,27.65-38.4A8,8,0,0,0,247.31,124.76ZM128,192c-30.78,0-57.67-11.19-79.93-33.25A133.47,133.47,0,0,1,25,128,133.33,133.33,0,0,1,48.07,97.25C70.33,75.19,97.22,64,128,64s57.67,11.19,79.93,33.25A133.46,133.46,0,0,1,231.05,128C223.84,141.46,192.43,192,128,192Zm0-112a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z"/></symbol><symbol id="i-text-aa" viewBox="0 0 256 256" fill="currentColor"><path d="M87.24,52.59a8,8,0,0,0-14.48,0l-64,136a8,8,0,1,0,14.48,6.81L39.9,160h80.2l16.66,35.4a8,8,0,1,0,14.48-6.81ZM47.43,144,80,74.79,112.57,144ZM200,96c-12.76,0-22.73,3.47-29.63,10.32a8,8,0,0,0,11.26,11.36c3.8-3.77,10-5.68,18.37-5.68,13.23,0,24,9,24,20v3.22A42.76,42.76,0,0,0,200,128c-22.06,0-40,16.15-40,36s17.94,36,40,36a42.73,42.73,0,0,0,24-7.25,8,8,0,0,0,16-.75V132C240,112.15,222.06,96,200,96Zm0,88c-13.23,0-24-9-24-20s10.77-20,24-20,24,9,24,20S213.23,184,200,184Z"/></symbol><symbol id="i-export" viewBox="0 0 256 256" fill="currentColor"><path d="M216,112v96a16,16,0,0,1-16,16H56a16,16,0,0,1-16-16V112A16,16,0,0,1,56,96H80a8,8,0,0,1,0,16H56v96H200V112H176a8,8,0,0,1,0-16h24A16,16,0,0,1,216,112ZM93.66,69.66,120,43.31V136a8,8,0,0,0,16,0V43.31l26.34,26.35a8,8,0,0,0,11.32-11.32l-40-40a8,8,0,0,0-11.32,0l-40,40A8,8,0,0,0,93.66,69.66Z"/></symbol><symbol id="i-code" viewBox="0 0 256 256" fill="currentColor"><path d="M69.12,94.15,28.5,128l40.62,33.85a8,8,0,1,1-10.24,12.29l-48-40a8,8,0,0,1,0-12.29l48-40a8,8,0,0,1,10.24,12.3Zm176,27.7-48-40a8,8,0,1,0-10.24,12.3L227.5,128l-40.62,33.85a8,8,0,1,0,10.24,12.29l48-40a8,8,0,0,0,0-12.29ZM162.73,32.48a8,8,0,0,0-10.25,4.79l-64,176a8,8,0,0,0,4.79,10.26A8.14,8.14,0,0,0,96,224a8,8,0,0,0,7.52-5.27l64-176A8,8,0,0,0,162.73,32.48Z"/></symbol><symbol id="i-lock-simple" viewBox="0 0 256 256" fill="currentColor"><path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/></symbol><symbol id="i-plugs-connected" viewBox="0 0 256 256" fill="currentColor"><path d="M237.66,18.34a8,8,0,0,0-11.32,0l-52.4,52.41-5.37-5.38a32.05,32.05,0,0,0-45.26,0L100,88.69l-6.34-6.35A8,8,0,0,0,82.34,93.66L88.69,100,65.37,123.31a32,32,0,0,0,0,45.26l5.38,5.37-52.41,52.4a8,8,0,0,0,11.32,11.32l52.4-52.41,5.37,5.38a32,32,0,0,0,45.26,0L156,167.31l6.34,6.35a8,8,0,0,0,11.32-11.32L167.31,156l23.32-23.31a32,32,0,0,0,0-45.26l-5.38-5.37,52.41-52.4A8,8,0,0,0,237.66,18.34Zm-116.29,161a16,16,0,0,1-22.62,0L76.69,157.25a16,16,0,0,1,0-22.62L100,111.31,144.69,156Zm57.94-57.94L156,144.69,111.31,100l23.32-23.31a16,16,0,0,1,22.62,0l22.06,22A16,16,0,0,1,179.31,121.37ZM88.57,35A8,8,0,0,1,103.43,29l8,20A8,8,0,0,1,96.57,55ZM24.57,93A8,8,0,0,1,35,88.57l20,8A8,8,0,0,1,49,111.43l-20-8A8,8,0,0,1,24.57,93ZM231.43,163a8,8,0,0,1-10.4,4.46l-20-8A8,8,0,1,1,207,144.57l20,8A8,8,0,0,1,231.43,163Zm-64,58.06A8,8,0,0,1,152.57,227l-8-20A8,8,0,0,1,159.43,201Z"/></symbol><symbol id="i-check-circle" viewBox="0 0 256 256" fill="currentColor"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></symbol><symbol id="i-plus" viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"/></symbol></defs></svg>
+
+  <a class="skip" href="#main">Skip to main content</a>
+
+  <header class="nav" id="nav">
     <a class="brand" href="./">Velin</a>
-    <nav>
-      <a href="./#features">Features</a>
-      <a href="./guide">Guide</a>
-      <a href="#contact">Contact</a>
-      <a href="https://github.com/Tahsin2155/velin">GitHub</a>
+    <nav class="nav-links" id="nav-links" aria-label="Primary">
+      <a href="#features" style="--i:0">Features</a>
+      <a href="#how" style="--i:1">How it works</a>
+      <a href="#privacy" style="--i:2">Privacy</a>
+      <a href="#faq" style="--i:3">FAQ</a>
+      <a href="./guide" style="--i:4">Guide</a>
+      <a href="https://github.com/Tahsin2155/velin" style="--i:5">GitHub</a>
+      <a class="btn primary sm" href="./guide#install" style="--i:6">Get the extension</a>
     </nav>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="Open menu"><span></span><span></span></button>
   </header>
 
-  <main>
+  <main id="main" tabindex="-1">
+
+    <!-- 1. Hero -->
     <section class="hero">
-      <h1>Make your new tab yours.</h1>
-      <p class="lead">Velin is a start page for your browser. Add widgets, write markdown notes, pin bookmarks and pick a background. It all saves in your browser, with no account and no sync server.</p>
-      <div class="cta">
-        <a class="btn primary" href="./guide#install">Get the extension</a>
-        <a class="btn" href="./app">Try it in the browser</a>
-      </div>
-      <p class="fine">Free to use, with the source on GitHub. The extension works in Chrome, Edge and Brave. Using another browser? The <a href="./guide#without-extension">guide</a> has options.</p>
-      <div class="frame">
-        <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i></div>
-        <figure class="shot" data-file="hero.webp"><img src="./screenshots/hero.webp" width="1600" height="1000" alt="Velin as a new tab: a clock, a todo list, a note and bookmarks on a custom background"></figure>
-      </div>
-    </section>
-
-    <section id="features" class="section">
-      <h2>What's in it</h2>
-      <div class="feature"><div class="copy"><h3>Widgets you arrange yourself</h3>
-        <p>Clock, bookmarks, todo, notes and a pomodoro timer. Drag a widget by its header, resize it from the corner, and it stays where you left it. The pomodoro keeps running across tabs.</p></div>
-        <figure class="shot" data-file="widgets.webp"><img src="./screenshots/widgets.webp" width="1600" height="1000" loading="lazy" alt="Edit mode with the toolbar at the bottom and several widgets being arranged"></figure></div>
-      <div class="feature flip"><div class="copy"><h3>Markdown notes</h3>
-        <p>A note widget is a small markdown editor with a live preview: headings, bold and italic, code, links, lists and tables.</p></div>
-        <figure class="shot" data-file="notes.webp"><img src="./screenshots/notes.webp" width="1600" height="1000" loading="lazy" alt="A note widget showing rendered markdown, including a table"></figure></div>
-      <div class="feature"><div class="copy"><h3>Your own background</h3>
-        <p>Solid colors, gradients, or an image of your own, with brightness and blur sliders.</p></div>
-        <figure class="shot" data-file="backgrounds.webp"><img src="./screenshots/backgrounds.webp" width="1600" height="1000" loading="lazy" alt="The background panel open, with an image background behind the widgets"></figure></div>
-
-      <!-- Themes section hidden for now (screenshots: theme-dark/light/glass/bw.png). Add a four-up grid of those here to bring it back. -->
-
-      <ul class="also">
-        <li><b>View and edit modes</b>Press <kbd>E</kbd> to lock everything in place, or unlock it to rearrange.</li>
-        <li><b>Free-floating text</b>Place text anywhere on the canvas.</li>
-        <li><b>Export and import</b>Save everything to one JSON file and load it back anywhere.</li>
-        <li><b>No build step</b>Four files. Open <code>app.html</code> and it works.</li>
-      </ul>
-    </section>
-
-    <section class="section">
-      <h2>Use it your way</h2>
-      <div class="ways">
-        <a href="./guide#install"><h3>Velin's extension</h3><p>Chrome, Edge and Brave. Velin becomes your new tab and loads from files on your computer.</p><span>Install steps</span></a>
-        <a href="./guide#without-extension"><h3>Another extension</h3><p>Any browser. A new-tab extension or a browser setting sends new tabs to the web version.</p><span>See the options</span></a>
-        <a href="./app"><h3>Just the website</h3><p>No setup at all. Open it when you want it, or bookmark it.</p><span>Open Velin</span></a>
+      <div class="wrap">
+        <p class="eyebrow">A free new tab page for Chrome, Edge and Brave</p>
+        <h1>Turn your new tab into<br class="br-d"> a page you actually use</h1>
+        <p class="sub">Velin puts widgets, markdown notes, bookmarks and a background you pick on every new tab. It saves in your browser, so there is no account to make and no server to trust.</p>
+        <div class="cta">
+          <a class="btn primary" href="./guide#install">Get the free extension</a>
+          <a class="textlink" href="./app">or try the web version first <svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+        </div>
+        <p class="proof"><svg class="ic" aria-hidden="true"><use href="#i-github-logo"/></svg><span>The source is public on <a href="https://github.com/Tahsin2155/velin">GitHub</a>, so you can read exactly what it does.</span></p>
+        <div class="frame reveal">
+          <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+          <figure class="shot" data-file="hero.webp"><img src="./screenshots/hero.webp" width="1600" height="1000" fetchpriority="high" alt="Velin as a new tab: a clock, a todo list, a note and bookmarks on a custom background"></figure>
+        </div>
       </div>
     </section>
 
-    <section class="section narrow">
-      <h2>Everything stays in your browser</h2>
-      <p>Widgets, notes, bookmarks and background images are stored in your browser's IndexedDB. There's no account and no Velin server.</p>
-      <p>Two things do reach the network: fonts load from Google Fonts, and bookmark icons are looked up through DuckDuckGo's icon service (then the site's own favicon as a fallback).</p>
+    <!-- 2. Problem to solution -->
+    <section class="section" id="why">
+      <div class="wrap">
+        <div class="head reveal">
+          <h2>Most new tabs are either empty or crowded</h2>
+          <p>A blank tab gives you nothing to work with. A crowded one fills the page with things you never picked. Velin sits in between.</p>
+        </div>
+        <div class="duo">
+          <div class="card reveal">
+            <h3>What you usually get</h3>
+            <p>A search box and a grid of tiles chosen for you, or a white page you have to leave before you can do anything.</p>
+          </div>
+          <div class="card reveal">
+            <h3>What Velin gives you</h3>
+            <p>An empty canvas that you fill with only what you reach for: a clock, a todo list, a note, the three sites you open every morning.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Tagline reveal -->
+    <section class="tagline" aria-label="Velin in one line">
+      <div class="wrap">
+        <p id="tagline-text">Your clock, your notes and your links, laid out the way you think. Saved on your device, with nothing to sign up for.</p>
+      </div>
+    </section>
+
+    <!-- 4. Benefits -->
+    <section class="section" id="features">
+      <div class="wrap">
+        <div class="head reveal">
+          <h2>Set it up once and it stays put</h2>
+          <p>Five kinds of widget, a markdown editor and a background of your choice, all on the page you already open dozens of times a day.</p>
+        </div>
+
+        <div class="feature reveal">
+          <div class="copy">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="#i-arrows-out-cardinal"/></svg></span>
+            <h3>Put things exactly where you reach for them</h3>
+            <p>Clock, bookmarks, todo, notes and a pomodoro timer. Drag a widget by its header, resize it from the corner, and it stays where you left it. The pomodoro keeps running across tabs.</p>
+          </div>
+          <figure class="shot" data-file="widgets.webp"><img src="./screenshots/widgets.webp" width="1600" height="1000" loading="lazy" alt="Edit mode with the toolbar at the bottom and several widgets being arranged"></figure>
+        </div>
+
+        <div class="feature flip reveal">
+          <div class="copy">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="#i-note-pencil"/></svg></span>
+            <h3>Write things down without leaving the tab</h3>
+            <p>A note widget is a small markdown editor with a live preview. Headings, bold and italic, code, links, lists and tables all work, and notes always show the rendered version in view mode.</p>
+          </div>
+          <figure class="shot" data-file="notes.webp"><img src="./screenshots/notes.webp" width="1600" height="1000" loading="lazy" alt="A note widget showing rendered markdown, including a table"></figure>
+        </div>
+
+        <div class="feature reveal">
+          <div class="copy">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="#i-image"/></svg></span>
+            <h3>Make it look like yours</h3>
+            <p>Pick a solid color or a gradient, or upload your own image up to 8 MB and tune its brightness and blur with sliders. Four themes switch between dark, light, glass, and black and white.</p>
+          </div>
+          <figure class="shot" data-file="backgrounds.webp"><img src="./screenshots/backgrounds.webp" width="1600" height="1000" loading="lazy" alt="The background panel open, with an image background behind the widgets"></figure>
+        </div>
+
+        <ul class="also">
+          <li class="card reveal"><span class="badge"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg></span><b>Safe by default</b>Every tab opens in view mode, so nothing moves by accident. Press <kbd>E</kbd> when you want to rearrange.</li>
+          <li class="card reveal"><span class="badge"><svg class="ic" aria-hidden="true"><use href="#i-text-aa"/></svg></span><b>Free text anywhere</b>Drop a text box anywhere on the canvas, then set its size, rotation, weight and color.</li>
+          <li class="card reveal"><span class="badge"><svg class="ic" aria-hidden="true"><use href="#i-export"/></svg></span><b>Take it with you</b>Export your whole setup to one JSON file and import it on another browser or computer.</li>
+          <li class="card reveal"><span class="badge"><svg class="ic" aria-hidden="true"><use href="#i-code"/></svg></span><b>Small enough to read</b>The app is four files with no build step. Open <code>app.html</code> and it works.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 5. How it works -->
+    <section class="section" id="how">
+      <div class="wrap">
+        <div class="head reveal">
+          <h2>Three steps from download to your own tab</h2>
+          <p>Velin is not on the Chrome Web Store yet, so you load it from a folder. The guide shows every click.</p>
+        </div>
+        <ol class="steps">
+          <li class="card reveal"><span class="num">1</span><h3>Download and load it</h3><p>Download the extension zip from the latest release, unzip it, then load the folder from your browser's extensions page with developer mode switched on.</p></li>
+          <li class="card reveal"><span class="num">2</span><h3>Open a new tab</h3><p>That is Velin. Click edit at the top, or press <kbd>E</kbd>, and add your first widget from the toolbar.</p></li>
+          <li class="card reveal"><span class="num">3</span><h3>Arrange it and leave it</h3><p>Everything saves on its own. Switch back to view mode and your layout stays exactly where you put it.</p></li>
+        </ol>
+        <p class="aside reveal">Would rather not install anything? <a href="./app">Open the web version</a>, or <a href="./guide#without-extension">point your new tab at it</a> in any browser.</p>
+      </div>
+    </section>
+
+    <!-- 6. Proof you can check (privacy) -->
+    <section class="section" id="privacy">
+      <div class="wrap">
+        <div class="head reveal">
+          <h2>Everything stays in your browser</h2>
+          <p>Velin has no accounts and no server of its own, so there is nothing to sign into and nothing for it to leak. Here is what that means in practice.</p>
+        </div>
+        <div class="trio">
+          <div class="card reveal"><span class="badge"><svg class="ic" aria-hidden="true"><use href="#i-lock-simple"/></svg></span><h3>Stored on your device</h3><p>Widgets, notes, bookmarks and background images live in your browser's IndexedDB. Clearing site data or removing the extension erases them, so export first.</p></div>
+          <div class="card reveal"><span class="badge"><svg class="ic" aria-hidden="true"><use href="#i-plugs-connected"/></svg></span><h3>Two outside requests</h3><p>Fonts load from Google Fonts, and bookmark icons are looked up through DuckDuckGo's icon service, then the site's own favicon as a fallback. Nothing you write is sent anywhere.</p></div>
+          <div class="card reveal"><span class="badge"><svg class="ic" aria-hidden="true"><use href="#i-code"/></svg></span><h3>Source you can read</h3><p>The code is public on GitHub and the app is only four files, so you can check what it does instead of taking this page's word for it.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. FAQ -->
+    <section class="section" id="faq">
+      <div class="wrap">
+        <div class="head center reveal">
+          <h2>Questions people ask first</h2>
+        </div>
+        <div class="faq-list reveal">
+          <details class="qa">
+            <summary>Do I need an account?<svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <p class="ans">No. Velin has no accounts and no server. Your setup is saved in your browser, on your device.</p>
+          </details>
+          <details class="qa">
+            <summary>Why do I have to turn on developer mode?<svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <p class="ans">Velin is not on the Chrome Web Store yet, so you load it from a folder on your computer. Your browser may show a developer mode notice, which is expected until Velin is listed.</p>
+          </details>
+          <details class="qa">
+            <summary>Does it work in Firefox or Safari?<svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <p class="ans">Not as an extension yet. You can still use the web version. Firefox needs a new tab extension that points to it, and Safari can open it for new tabs from its own settings. The guide has the steps for each.</p>
+          </details>
+          <details class="qa">
+            <summary>What happens to my data if I clear my browser data or remove the extension?<svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <p class="ans">It is erased, because it lives in the browser. Export your setup to a JSON file first, then import that file wherever you want your layout back.</p>
+          </details>
+          <details class="qa">
+            <summary>Can I move my layout to another computer?<svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <p class="ans">Yes. Export downloads one JSON file with your theme, background, widgets, notes and bookmarks. Import it on the other browser and your setup replaces whatever was there. The extension and the web version keep separate storage, so export and import is also how you move between them.</p>
+          </details>
+          <details class="qa">
+            <summary>What leaves my browser?<svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <p class="ans">Two things. Fonts load from Google Fonts, and bookmark icons are looked up through DuckDuckGo&#x27;s icon service, then the site&#x27;s own favicon as a fallback. Your widgets, notes and bookmarks are never sent anywhere. The message form at the bottom of this page is the one exception, and it only sends what you type into it.</p>
+          </details>
+          <details class="qa">
+            <summary>Is Velin open source?<svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <p class="ans">The source is public on GitHub and you are welcome to read it and contribute. It is not open source, though. Copying the code into other projects or redistributing it needs permission.</p>
+          </details>
+          <details class="qa">
+            <summary>Does the pomodoro timer keep running when I switch tabs?<svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <p class="ans">Yes. Its state is shared across tabs, so starting it in one tab keeps it running while you check another. Allow notifications if you want an alert when a session ends.</p>
+          </details>
+          <details class="qa">
+            <summary>Was Velin built with AI?<svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <p class="ans">Yes. Velin is made by Tahsin with help from AI (Claude).</p>
+          </details>
+          <details class="qa">
+            <summary>How do I report a bug or ask for a feature?<svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <p class="ans">Use the message form at the bottom of this page, or open an issue on GitHub.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8. Risk reversal and final CTA -->
+    <section class="section" id="get">
+      <div class="wrap">
+        <div class="final reveal">
+          <h2>Get Velin on your next new tab</h2>
+          <p>Try it for a day. If it is not for you, remove the extension and your new tab goes back to your browser's default.</p>
+          <ul class="chips">
+            <li><svg class="ic" aria-hidden="true"><use href="#i-check-circle"/></svg>Free to use</li>
+            <li><svg class="ic" aria-hidden="true"><use href="#i-check-circle"/></svg>No account</li>
+            <li><svg class="ic" aria-hidden="true"><use href="#i-check-circle"/></svg>Export your setup any time</li>
+          </ul>
+          <div class="cta">
+            <a class="btn primary" href="./guide#install">Get the free extension</a>
+            <a class="textlink" href="./app">or try the web version first <svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
   <footer id="contact" class="site-footer">
-    <div class="f-grid has-form">
+    <div class="f-grid">
       <div class="f-brand">
         <a class="brand" href="./">Velin</a>
         <p>A start page for your new tab. Widgets, notes, bookmarks and your own background, kept in your browser.</p>
       </div>
       <nav class="f-col" aria-label="Velin">
-        <h4>Velin</h4>
+        <h2>Velin</h2>
         <a href="./guide#install">Get the extension</a>
         <a href="./app">Open the web version</a>
         <a href="./guide">Guide</a>
+        <a href="#privacy">Privacy</a>
       </nav>
       <nav class="f-col" aria-label="Project">
-        <h4>Project</h4>
+        <h2>Project</h2>
         <a href="https://github.com/Tahsin2155/velin">Source on GitHub</a>
         <a href="https://github.com/Tahsin2155/velin/releases">Releases</a>
         <a href="https://github.com/Tahsin2155/velin/issues">Report an issue</a>
+        <a href="https://github.com/Tahsin2155/velin#license">License and terms</a>
         <a href="https://tahsin2155.github.io">Made by Tahsin</a>
       </nav>
       <form id="contact-form" class="contact" action="https://formspree.io/f/xyeewrbp" method="POST">
-        <h4>Send me a message</h4>
-        <p class="f-note">Bug, idea, or just hello. Sent through <a href="https://formspree.io">Formspree</a> and emailed to me; the app itself never sends your data anywhere.</p>
+        <h2>Send me a message</h2>
+        <p class="f-note">Bug, idea, or just hello. Sent through <a href="https://formspree.io">Formspree</a> and emailed to me. The app itself never sends your data anywhere.</p>
         <label><span>Name <span class="opt">(optional)</span></span><input type="text" name="name" autocomplete="name" maxlength="100"></label>
         <label>Email<input type="email" name="email" autocomplete="email" required maxlength="200"></label>
         <label>Message<textarea name="message" rows="4" required maxlength="5000"></textarea></label>
@@ -109,6 +279,8 @@
     </div>
     <div class="f-bar"><span>Built with help from AI (Claude).</span><a href="#top">Back to top</a></div>
   </footer>
+
   <script src="./landing.js"></script>
+  <script src="./home.js"></script>
 </body>
 </html>

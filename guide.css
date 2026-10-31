@@ -1,0 +1,376 @@
+/* Guide page extras. Loaded after home.css, which holds the tokens, nav, buttons, cards and footer. */
+
+.guide-wrap {
+  display: grid;
+  gap: var(--s-300);
+  width: 100%;
+  max-width: calc(1080px + 2 * var(--s-300));
+  margin-inline: auto;
+  padding: calc(var(--s-900) + var(--s-300)) var(--s-300) var(--s-900);
+}
+
+@media (min-width: 1024px) {
+  .guide-wrap {
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: var(--s-700);
+    align-items: start;
+  }
+}
+
+/* ── table of contents: pills on small screens, a sticky list on wide ones ── */
+.toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-75);
+}
+
+.toc-title {
+  width: 100%;
+  color: var(--text3);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: 500;
+}
+
+.toc a {
+  padding: var(--s-50) var(--s-100);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  color: var(--text2);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  text-decoration: none;
+  transition: color 300ms var(--ease), background-color 300ms var(--ease), border-color 300ms var(--ease);
+}
+
+.toc a:hover,
+.toc a.on {
+  color: var(--text);
+  background: var(--raised);
+}
+
+@media (min-width: 1024px) {
+  .toc {
+    position: sticky;
+    top: var(--s-900);
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: var(--s-25);
+  }
+
+  .toc-title {
+    padding: 0 var(--s-100) var(--s-75);
+  }
+
+  .toc a {
+    padding: var(--s-75) var(--s-100);
+    border-color: transparent;
+  }
+
+  .toc a.on {
+    border-color: var(--line-soft);
+  }
+}
+
+/* ── prose ── */
+.prose {
+  min-width: 0;
+  max-width: 720px;
+}
+
+.prose:focus {
+  outline: none;
+}
+
+.prose > * + * {
+  margin-top: var(--s-200);
+}
+
+.prose h1 {
+  font-size: var(--text-4xl);
+  line-height: var(--lh-4xl);
+  letter-spacing: -0.01em;
+}
+
+@media (min-width: 768px) {
+  .prose h1 {
+    font-size: var(--text-5xl);
+    line-height: 1;
+  }
+}
+
+.prose .lead {
+  color: var(--text2);
+  font-size: var(--text-lg);
+  line-height: var(--lh-lg);
+}
+
+.prose > h2 {
+  margin-top: var(--s-800);
+}
+
+.prose p,
+.prose li,
+.prose dd {
+  color: var(--text2);
+}
+
+.prose b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.prose code {
+  overflow-wrap: anywhere;
+}
+
+.ui {
+  padding: var(--s-25) var(--s-50);
+  border-radius: var(--r);
+  background: var(--raised);
+  color: var(--text);
+  font-weight: 500;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* ── route cards at the top ── */
+.ways {
+  display: grid;
+  gap: var(--s-200);
+}
+
+@media (min-width: 768px) {
+  .ways {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.way {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  transition: border-color 300ms var(--ease), transform 500ms var(--ease);
+}
+
+.way:hover {
+  border-color: var(--text3);
+  transform: translateY(calc(-1 * var(--s-25)));
+}
+
+.way:active {
+  transform: scale(0.98);
+}
+
+.way-title {
+  display: block;
+  margin-bottom: var(--s-75);
+  color: var(--text);
+  font-family: var(--font-heading);
+  font-size: var(--text-xl);
+  line-height: var(--lh-xl);
+  font-weight: var(--heading-weight);
+  letter-spacing: -0.01em;
+}
+
+.way .go {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-75);
+  margin-top: auto;
+  padding-top: var(--s-200);
+  color: var(--accent);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: 500;
+}
+
+.way .go .ic {
+  width: 1.25rem;
+  height: 1.25rem;
+  transition: transform 500ms var(--ease);
+}
+
+.way:hover .go .ic {
+  transform: translateX(var(--s-50));
+}
+
+/* ── install steps ── */
+.stepper {
+  list-style: none;
+  counter-reset: step;
+}
+
+.stepper li {
+  counter-increment: step;
+  position: relative;
+  padding: var(--s-75) 0 var(--s-400) var(--s-700);
+}
+
+.stepper li:last-child {
+  padding-bottom: 0;
+}
+
+.stepper li::before {
+  content: counter(step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: var(--s-500);
+  height: var(--s-500);
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.stepper li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--s-500) + var(--s-75));
+  bottom: var(--s-75);
+  left: 19px;
+  width: 2px;
+  background: var(--line);
+}
+
+.copyrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-75);
+  margin-top: var(--s-100);
+}
+
+button.copy {
+  padding: var(--s-50) var(--s-100);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--text);
+  font: 400 var(--text-sm) / var(--lh-sm) var(--mono);
+  cursor: pointer;
+  transition: border-color 300ms var(--ease), background-color 300ms var(--ease), transform 300ms var(--ease);
+}
+
+button.copy:hover {
+  border-color: var(--accent);
+  background: var(--raised);
+}
+
+button.copy:active {
+  transform: scale(0.98);
+}
+
+.addr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-100);
+}
+
+.addr code {
+  padding: var(--s-75) var(--s-100);
+  word-break: break-all;
+}
+
+/* ── definition lists: one bordered panel, rows separated by space ── */
+.defs {
+  display: grid;
+  gap: var(--s-50);
+  padding: var(--s-75);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+}
+
+.defs > div {
+  display: grid;
+  gap: var(--s-50);
+  padding: var(--s-100) var(--s-200);
+}
+
+.defs dt {
+  color: var(--text);
+  font-weight: 600;
+}
+
+@media (min-width: 768px) {
+  .defs > div {
+    grid-template-columns: 11rem 1fr;
+    gap: var(--s-300);
+  }
+}
+
+.plain {
+  display: grid;
+  gap: var(--s-75);
+  padding-left: var(--s-300);
+}
+
+/* ── browser tabs ── */
+.tablist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-50);
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--s-50);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+}
+
+.tablist button {
+  padding: var(--s-75) var(--s-100);
+  border: 0;
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--text2);
+  font: 500 var(--text-sm) / var(--lh-sm) var(--font);
+  cursor: pointer;
+  transition: color 300ms var(--ease), background-color 300ms var(--ease);
+}
+
+.tablist button:hover {
+  color: var(--text);
+}
+
+.tablist button[aria-selected="true"] {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.panel {
+  margin-top: var(--s-300);
+}
+
+.panel > * + * {
+  margin-top: var(--s-200);
+}
+
+/* ── notes ── */
+.note {
+  display: flex;
+  gap: var(--s-100);
+  padding: var(--s-200);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+}
+
+.note .ic {
+  margin-top: var(--s-25);
+  color: var(--accent);
+}
+
+/* ── screenshots and troubleshooting ── */
+.prose .shot {
+  margin-top: var(--s-300);
+}
+
+.qa-list {
+  display: grid;
+  gap: var(--s-100);
+}

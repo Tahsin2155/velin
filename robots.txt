@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://newvelintab.netlify.app/sitemap.xml
